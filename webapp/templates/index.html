@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BBAP-Sec AI Attack Lab</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-inner">
+            <div class="logo-group">
+                <div class="logo-icon">🪲</div>
+                <div>
+                    <h1>BBAP-Sec <span class="accent">AI Attack Lab</span></h1>
+                    <p class="subtitle">Educational AI Security Testing Pipeline</p>
+                </div>
+            </div>
+            <nav>
+                <a href="#attacks" class="nav-link active">Attacks</a>
+                <a href="#results" class="nav-link">Results</a>
+                <a href="#checklists" class="nav-link">Checklists</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <!-- Attack Modules -->
+        <section id="attacks">
+            <h2 class="section-title">Attack Modules</h2>
+            <div class="card-grid" id="attack-grid"></div>
+        </section>
+
+        <!-- Run Panel -->
+        <section id="run-panel" class="hidden">
+            <div class="panel">
+                <div class="panel-header">
+                    <h3 id="panel-title">Configure Attack</h3>
+                    <button class="btn-close" onclick="closePanel()">✕</button>
+                </div>
+                <div id="panel-form"></div>
+                <div class="panel-actions">
+                    <button class="btn-primary" onclick="runAttack()">▶ Run Attack</button>
+                </div>
+                <div id="panel-output" class="hidden">
+                    <pre id="output-text"></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Results -->
+        <section id="results">
+            <h2 class="section-title">Recent Results</h2>
+            <div id="results-list" class="results-container">
+                <p class="muted">Run an attack to see results here.</p>
+            </div>
+        </section>
+
+        <!-- Checklists -->
+        <section id="checklists">
+            <h2 class="section-title">Security Checklists</h2>
+            <div id="checklist-list" class="checklist-container"></div>
+        </section>
+    </main>
+
+    <footer>
+        <p>BBAP-Sec AI Attack Lab v1.0 — Educational Use Only</p>
+    </footer>
+
+    <script>
+        let currentAttack = null;
+
+        async function loadAttacks() {
+            const res = await fetch('/api/attacks');
+            const attacks = await res.json();
+            const grid = document.getElementById('attack-grid');
+            grid.innerHTML = attacks.map(a => `
+                <div class="card" onclick="openPanel('${a.id}', '${a.name}')">
+                    <div class="card-icon">${a.icon}</div>
+                    <h3>${a.name}</h3>
+                    <p>${a.description}</p>
+                    <span class="card-badge">Run →</span>
+                </div>
+            `).join('');
+        }
+
+        function openPanel(id, name) {
+            currentAttack = id;
+            document.getElementById('panel-title').textContent = name;
+            document.getElementById('run-panel').classList.remove('hidden');
+            document.getElementById('panel-output').classList.add('hidden');
+
+            const forms = {
+                adversarial: `
+                    <label>Attack Type<select id="p-attack_type">
+                        <option value="both">Both (FGSM + PGD)</option>
+                        <option value="fgsm">FGSM only</option>
+                        <option value="pgd">PGD only</option>
+                    </select></label>
+                    <label>Epsilon <input type="number" id="p-epsilon" value="0.03" step="0.01" min="0" max="1"></label>
+                    <label>Dataset<select id="p-dataset"><option value="mnist">MNIST</option><option value="cifar10">CIFAR-10</option></select></label>`,
+                data_poisoning: `
+                    <label>Strategy<select id="p-strategy">
+                        <option value="label_flip">Label Flip</option>
+                        <option value="backdoor">Backdoor Injection</option>
+                    </select></label>
+                    <label>Poison Rate <input type="number" id="p-poison_rate" value="0.1" step="0.05" min="0" max="1"></label>
+                    <label>Dataset<select id="p-dataset"><option value="mnist">MNIST</option><option value="cifar10">CIFAR-10</option></select></label>`,
+                evasion: `
+                    <label>Method<select id="p-method">
+                        <option value="all">All Methods</option>
+                        <option value="pixel">Pixel Perturbation</option>
+                        <option value="noise">Feature Noise</option>
+                        <option value="spatial">Spatial Transform</option>
+                    </select></label>
+                    <label>Dataset<select id="p-dataset"><option value="mnist">MNIST</option><option value="cifar10">CIFAR-10</option></select></label>`,
+                model_extraction: `
+                    <label>Strategy<select id="p-strategy">
+                        <option value="random">Random Queries</option>
+                        <option value="active">Active Learning</option>
+                    </select></label>
+                    <label>Query Budget <input type="number" id="p-num_queries" value="1000" step="100" min="100"></label>
+                    <label>Dataset<select id="p-dataset"><option value="mnist">MNIST</option><option value="cifar10">CIFAR-10</option></select></label>`,
+                prompt_injection: `
+                    <label>Test Suite<select id="p-test_suite">
+                        <option value="all">All Suites</option>
+                        <option value="direct_override">Direct Override</option>
+                        <option value="indirect_context">Indirect Context</option>
+                        <option value="data_exfiltration">Data Exfiltration</option>
+                        <option value="instruction_hierarchy">Instruction Hierarchy</option>
+                    </select></label>`,
+            };
+            document.getElementById('panel-form').innerHTML = forms[id] || '';
+        }
+
+        function closePanel() {
+            document.getElementById('run-panel').classList.add('hidden');
+        }
+
+        async function runAttack() {
+            const params = {};
+            document.querySelectorAll('#panel-form input, #panel-form select').forEach(el => {
+                const key = el.id.replace('p-', '');
+                params[key] = el.type === 'number' ? parseFloat(el.value) : el.value;
+            });
+
+            const outputDiv = document.getElementById('panel-output');
+            const outputText = document.getElementById('output-text');
+            outputDiv.classList.remove('hidden');
+            outputText.textContent = '⏳ Running attack... (this may take a few minutes)\n';
+
+            const res = await fetch(`/api/run/${currentAttack}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(params),
+            });
+            const data = await res.json();
+
+            if (data.job_id) {
+                pollJob(data.job_id);
+            }
+        }
+
+        async function pollJob(jobId) {
+            const outputText = document.getElementById('output-text');
+            const interval = setInterval(async () => {
+                const res = await fetch(`/api/status/${jobId}`);
+                const status = await res.json();
+                if (status.status === 'completed') {
+                    clearInterval(interval);
+                    outputText.textContent = status.output || '✅ Complete. Check Results tab.';
+                    loadResults();
+                } else if (status.status === 'failed' || status.status === 'timeout') {
+                    clearInterval(interval);
+                    outputText.textContent = `❌ ${status.status}\n${status.error || ''}`;
+                }
+            }, 2000);
+        }
+
+        async function loadResults() {
+            const res = await fetch('/api/results');
+            const results = await res.json();
+            const container = document.getElementById('results-list');
+            if (results.length === 0) {
+                container.innerHTML = '<p class="muted">No results yet. Run an attack first.</p>';
+                return;
+            }
+            container.innerHTML = results.map(r => `
+                <div class="result-card">
+                    <div class="result-header">
+                        <strong>${r.data.experiment || r.file}</strong>
+                        <span class="result-time">${r.data.timestamp || ''}</span>
+                    </div>
+                    <pre class="result-data">${JSON.stringify(r.data, null, 2)}</pre>
+                </div>
+            `).join('');
+        }
+
+        async function loadChecklists() {
+            const res = await fetch('/api/checklists');
+            const items = await res.json();
+            const container = document.getElementById('checklist-list');
+            container.innerHTML = items.map(c => `
+                <details class="checklist-item">
+                    <summary>${c.name.replace(/_/g, ' ').replace(/^\d+\s*/, '')}</summary>
+                    <pre class="checklist-content">${c.content}</pre>
+                </details>
+            `).join('');
+        }
+
+        // Nav
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', e => {
+                document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+                e.target.classList.add('active');
+            });
+        });
+
+        // Init
+        loadAttacks();
+        loadResults();
+        loadChecklists();
+    </script>
+</body>
+</html>

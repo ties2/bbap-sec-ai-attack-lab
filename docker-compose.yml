@@ -1,0 +1,19 @@
+# ============================================
+# BBAP-Sec AI Attack Lab — Docker Compose
+# ============================================
+
+version: "3.9"
+
+services:
+  lab:
+    build: .
+    container_name: bbap-sec-lab
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./results:/app/results
+      - ./saved_models:/app/saved_models
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped

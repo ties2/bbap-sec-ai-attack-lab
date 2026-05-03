@@ -1,0 +1,89 @@
+# ============================================
+# BBAP-Sec AI Attack Lab — .gitignore
+# ============================================
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+*.whl
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ---------- Virtual Environments ----------
+venv/
+.venv/
+env/
+ENV/
+
+# ---------- IDE / Editors ----------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# ---------- Jupyter Notebooks ----------
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ---------- PyTorch / ML Artifacts ----------
+*.pt
+*.pth
+*.onnx
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+saved_models/
+checkpoints/
+runs/
+mlruns/
+wandb/
+
+# ---------- Datasets (download via script) ----------
+datasets/data/
+datasets/*.csv
+datasets/*.tsv
+datasets/*.json
+datasets/*.tar.gz
+datasets/*.zip
+!datasets/download_datasets.py
+
+# ---------- Results / Reports ----------
+results/
+reports/
+*.log
+
+# ---------- Docker ----------
+docker-compose.override.yml
+
+# ---------- Environment & Secrets ----------
+.env
+.env.*
+*.key
+*.pem
+config/local.yaml
+config/secrets.yaml
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- Misc ----------
+*.bak
+*.tmp
+*.temp
+node_modules/

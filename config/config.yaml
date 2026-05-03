@@ -1,0 +1,72 @@
+# ============================================
+# BBAP-Sec AI Attack Lab — Configuration
+# ============================================
+
+project:
+  name: "BBAP-Sec AI Attack Lab"
+  version: "1.0.0"
+  description: "Educational AI Security Testing Pipeline"
+
+# --- Target Model Settings ---
+model:
+  architecture: "resnet18"        # resnet18 | simple_cnn | mlp
+  dataset: "cifar10"              # mnist | cifar10
+  pretrained: false
+  epochs: 10
+  batch_size: 64
+  learning_rate: 0.001
+  device: "auto"                  # auto | cpu | cuda
+
+# --- Adversarial Attack Settings ---
+adversarial:
+  fgsm:
+    epsilons: [0.01, 0.03, 0.05, 0.1, 0.15, 0.2, 0.3]
+  pgd:
+    epsilon: 0.03
+    alpha: 0.007                  # step size (typically ε/4)
+    num_steps: 40
+    random_start: true
+
+# --- Data Poisoning Settings ---
+poisoning:
+  poison_rate: 0.1                # fraction of training data to poison
+  strategy: "label_flip"          # label_flip | backdoor | clean_label
+  backdoor:
+    trigger_size: 4               # pixel patch size
+    trigger_position: "bottom_right"
+    target_label: 0
+
+# --- Evasion Attack Settings ---
+evasion:
+  perturbation_type: "pixel"      # pixel | feature | character
+  max_perturbation: 0.05
+  targeted: false
+
+# --- Model Extraction Settings ---
+extraction:
+  num_queries: 1000
+  query_strategy: "random"        # random | active_learning | knockoff
+  substitute_arch: "simple_cnn"
+  victim_api_url: "http://localhost:8080/predict"
+
+# --- Prompt Injection Settings ---
+prompt_injection:
+  test_suites:
+    - "direct_override"
+    - "indirect_context"
+    - "instruction_hierarchy"
+    - "data_exfiltration"
+  max_attempts: 50
+
+# --- Web Dashboard ---
+webapp:
+  host: "0.0.0.0"
+  port: 5000
+  debug: false
+
+# --- Paths ---
+paths:
+  datasets: "datasets/data"
+  models: "saved_models"
+  results: "results"
+  reports: "reports"
