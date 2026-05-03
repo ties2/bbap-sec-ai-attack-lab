@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="BBAP-Sec Logo" width="280"/>
+  <img src="assets/BBAP-Sec-final.png" alt="BBAP-Sec Logo" width="280"/>
 </p>
 
 <h1 align="center">BBAP-Sec AI Attack Lab</h1>
