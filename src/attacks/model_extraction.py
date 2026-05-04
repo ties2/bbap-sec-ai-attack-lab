@@ -1,34 +1,24 @@
 """
 BBAP-Sec AI Attack Lab — Model Extraction Attack
 =================================================
-Simulates model stealing by querying a black-box API and training
-a substitute model on the responses. Tests API security controls.
-
-Based on: Tramer et al., "Stealing Machine Learning Models via Prediction APIs" (2016)
-
+Simulates model stealing by querying a black-box API.
 Educational use only — tests your own models/APIs.
 """
 
-import argparse
-import json
-import random
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import numpy as np
+import argparse, json, torch, torch.nn as nn, torch.optim as optim, numpy as np
 from pathlib import Path
 from datetime import datetime
-
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from src.utils.logger import setup_logger, get_logger, get_project_root
 from src.models.target_model import SimpleCNN, load_dataset, evaluate_model, get_device, train_model
+
+logger = get_logger("model_extraction")
 
 
 class VictimAPI:
-    """
-    Simulates a black-box ML API endpoint.
-    In real testing, replace with actual HTTP calls to your API.
-    """
+    """Simulates a black-box ML API endpoint."""
 
     def __init__(self, model, device="cpu"):
         self.model = model.to(device)
@@ -37,128 +27,96 @@ class VictimAPI:
         self.query_count = 0
 
     def predict(self, x):
-        """Returns predicted label (simulates label-only API)."""
         self.query_count += 1
         with torch.no_grad():
-            output = self.model(x.to(self.device))
-            return output.argmax(1).cpu()
+            return self.model(x.to(self.device)).argmax(1).cpu()
 
     def predict_proba(self, x):
-        """Returns probability vector (simulates confidence API)."""
         self.query_count += 1
         with torch.no_grad():
-            output = self.model(x.to(self.device))
-            return torch.softmax(output, dim=1).cpu()
+            return torch.softmax(self.model(x.to(self.device)), dim=1).cpu()
 
 
-def random_query_extraction(victim_api, substitute_model, num_queries, in_channels=1,
-                            img_size=28, device="cpu"):
-    """
-    Model extraction via random queries.
-    Generates random inputs, queries the victim, and trains a substitute.
-    """
-    substitute_model = substitute_model.to(device)
-    optimizer = optim.Adam(substitute_model.parameters(), lr=0.001)
+def random_query_extraction(victim_api, substitute, num_queries, in_channels=1, img_size=28, device="cpu"):
+    """Model extraction via random queries."""
+    substitute = substitute.to(device)
+    optimizer = optim.Adam(substitute.parameters(), lr=0.001)
     criterion = nn.CrossEntropyLoss()
-
-    print(f"    Generating {num_queries} random queries...")
     batch_size = 64
-    substitute_model.train()
 
+    logger.info(f"Random query extraction: {num_queries} queries, batch_size={batch_size}")
+    substitute.train()
     for batch_start in range(0, num_queries, batch_size):
         current_batch = min(batch_size, num_queries - batch_start)
-
-        # Generate random query images
         queries = torch.rand(current_batch, in_channels, img_size, img_size)
-
-        # Get victim predictions (labels only)
         victim_labels = victim_api.predict(queries)
-
-        # Train substitute on victim's labels
         queries, victim_labels = queries.to(device), victim_labels.to(device)
         optimizer.zero_grad()
-        output = substitute_model(queries)
-        loss = criterion(output, victim_labels)
+        loss = criterion(substitute(queries), victim_labels)
         loss.backward()
         optimizer.step()
 
-    return substitute_model
+        if (batch_start + current_batch) % 500 == 0 or batch_start + current_batch == num_queries:
+            logger.debug(f"  Queries sent: {victim_api.query_count}, loss: {loss.item():.4f}")
+
+    logger.info(f"Extraction complete: {victim_api.query_count} total API queries")
+    return substitute
 
 
-def active_learning_extraction(victim_api, substitute_model, initial_queries, rounds=5,
-                               augment_factor=2, test_loader=None, in_channels=1,
-                               img_size=28, device="cpu"):
-    """
-    Jacobian-based Dataset Augmentation (JDA) for active model extraction.
-    Uses the substitute model's gradients to generate informative queries.
-    """
-    substitute_model = substitute_model.to(device)
-    optimizer = optim.Adam(substitute_model.parameters(), lr=0.001)
+def active_learning_extraction(victim_api, substitute, initial_queries, rounds=5, test_loader=None,
+                                in_channels=1, img_size=28, device="cpu"):
+    """Active learning-based model extraction with Jacobian augmentation."""
+    substitute = substitute.to(device)
+    optimizer = optim.Adam(substitute.parameters(), lr=0.001)
     criterion = nn.CrossEntropyLoss()
 
-    # Initial random seed queries
+    logger.info(f"Active learning extraction: {initial_queries} seed queries, {rounds} rounds")
+
     synthetic_data = torch.rand(initial_queries, in_channels, img_size, img_size)
     synthetic_labels = victim_api.predict(synthetic_data)
+    logger.debug(f"  Seed queries complete: {victim_api.query_count} API calls")
 
-    for round_num in range(rounds):
-        # Train substitute
-        substitute_model.train()
+    for rnd in range(rounds):
+        substitute.train()
         for epoch in range(3):
             idx = torch.randperm(len(synthetic_data))
             for i in range(0, len(idx), 64):
-                batch_idx = idx[i:i + 64]
+                batch_idx = idx[i:i+64]
                 data = synthetic_data[batch_idx].to(device)
                 labels = synthetic_labels[batch_idx].to(device)
-
                 optimizer.zero_grad()
-                output = substitute_model(data)
-                loss = criterion(output, labels)
+                loss = criterion(substitute(data), labels)
                 loss.backward()
                 optimizer.step()
 
-        # Augment: generate new queries around decision boundary
-        substitute_model.eval()
+        substitute.eval()
         new_queries = synthetic_data.clone().requires_grad_(True)
-        output = substitute_model(new_queries.to(device))
-        loss = output.max(1)[0].sum()
-        loss.backward()
-
-        perturbation = 0.1 * new_queries.grad.sign()
-        augmented = torch.clamp(synthetic_data + perturbation.cpu(), 0, 1).detach()
-
-        # Query victim with augmented data
+        output = substitute(new_queries.to(device))
+        output.max(1)[0].sum().backward()
+        augmented = torch.clamp(synthetic_data + 0.1 * new_queries.grad.sign(), 0, 1).detach()
         aug_labels = victim_api.predict(augmented)
-
-        # Combine datasets
         synthetic_data = torch.cat([synthetic_data, augmented])
         synthetic_labels = torch.cat([synthetic_labels, aug_labels])
 
-        # Evaluate fidelity if test data available
         if test_loader:
-            fidelity = compute_fidelity(victim_api, substitute_model, test_loader, device)
-            print(f"    Round {round_num + 1}/{rounds} — Fidelity: {fidelity:.1f}% "
-                  f"| Queries: {victim_api.query_count}")
+            fidelity = compute_fidelity(victim_api, substitute, test_loader, device)
+            logger.info(f"  Round {rnd+1}/{rounds} — fidelity: {fidelity:.1f}% | queries: {victim_api.query_count} | dataset size: {len(synthetic_data)}")
+        else:
+            logger.info(f"  Round {rnd+1}/{rounds} — queries: {victim_api.query_count}")
 
-    return substitute_model
+    return substitute
 
 
-def compute_fidelity(victim_api, substitute_model, test_loader, device):
-    """
-    Fidelity: agreement rate between victim and substitute predictions.
-    High fidelity = successful extraction.
-    """
-    substitute_model.eval()
-    agree = 0
-    total = 0
-
+def compute_fidelity(victim_api, substitute, test_loader, device):
+    substitute.eval()
+    agree, total = 0, 0
     for data, _ in test_loader:
         data = data.to(device)
         victim_pred = victim_api.predict(data)
         with torch.no_grad():
-            sub_pred = substitute_model(data).argmax(1).cpu()
+            sub_pred = substitute(data).argmax(1).cpu()
         agree += victim_pred.eq(sub_pred).sum().item()
         total += data.size(0)
-
     return 100.0 * agree / total
 
 
@@ -170,67 +128,58 @@ def main():
     parser.add_argument("--output", type=str, default=None)
     args = parser.parse_args()
 
-    print("=" * 60)
-    print("  BBAP-Sec — Model Extraction Testing")
-    print("=" * 60)
+    setup_logger(get_project_root())
+
+    logger.info("=" * 60)
+    logger.info("BBAP-Sec — Model Extraction Testing")
+    logger.info("=" * 60)
+    logger.info(f"Config: strategy={args.strategy}, queries={args.queries}, dataset={args.dataset}")
 
     device = get_device()
-    print(f"  Strategy: {args.strategy}")
-    print(f"  Query budget: {args.queries}")
-
-    # Train victim model
-    train_loader, test_loader, in_ch = load_dataset(args.dataset)
     img_size = 28 if args.dataset == "mnist" else 32
 
-    print("\n  Training victim model...")
+    logger.info("[1/4] Training victim model")
+    train_loader, test_loader, in_ch = load_dataset(args.dataset)
     victim_model = SimpleCNN(num_classes=10, in_channels=in_ch)
     victim_model = train_model(victim_model, train_loader, epochs=5, device=device)
     victim_acc = evaluate_model(victim_model, test_loader, device=device)
-    print(f"  Victim accuracy: {victim_acc:.2f}%")
 
-    # Create victim API
+    logger.info("[2/4] Creating victim API and substitute model")
     victim_api = VictimAPI(victim_model, device=device)
-
-    # Create substitute model (different init, same architecture for simplicity)
     substitute = SimpleCNN(num_classes=10, in_channels=in_ch)
+    logger.debug(f"Victim API initialized, substitute model created (random weights)")
 
-    print(f"\n  Running {args.strategy} extraction...")
+    logger.info(f"[3/4] Running {args.strategy} extraction attack")
     if args.strategy == "random":
-        substitute = random_query_extraction(
-            victim_api, substitute, args.queries,
-            in_channels=in_ch, img_size=img_size, device=device,
-        )
+        substitute = random_query_extraction(victim_api, substitute, args.queries,
+                                              in_channels=in_ch, img_size=img_size, device=device)
     else:
-        substitute = active_learning_extraction(
-            victim_api, substitute, initial_queries=args.queries // 5,
-            rounds=5, test_loader=test_loader,
-            in_channels=in_ch, img_size=img_size, device=device,
-        )
+        substitute = active_learning_extraction(victim_api, substitute, initial_queries=args.queries // 5,
+                                                 rounds=5, test_loader=test_loader,
+                                                 in_channels=in_ch, img_size=img_size, device=device)
 
-    # Evaluate
+    logger.info("[4/4] Evaluating extraction success")
     fidelity = compute_fidelity(victim_api, substitute, test_loader, device)
     sub_acc = evaluate_model(substitute, test_loader, device=device)
 
-    results = {
-        "strategy": args.strategy,
-        "num_queries": victim_api.query_count,
-        "victim_accuracy": round(victim_acc, 2),
-        "substitute_accuracy": round(sub_acc, 2),
-        "fidelity": round(fidelity, 2),
-    }
-
-    print(f"\n  Victim accuracy:     {victim_acc:.2f}%")
-    print(f"  Substitute accuracy: {sub_acc:.2f}%")
-    print(f"  Fidelity (agreement): {fidelity:.2f}%")
-    print(f"  Total API queries:   {victim_api.query_count}")
+    logger.info(f"Victim accuracy: {victim_acc:.2f}%")
+    logger.info(f"Substitute accuracy: {sub_acc:.2f}%")
+    logger.info(f"Fidelity (agreement): {fidelity:.2f}%")
+    logger.info(f"Total API queries: {victim_api.query_count}")
 
     if args.output:
         Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+        results = {"experiment": "model_extraction", "timestamp": datetime.now().isoformat(),
+                    "strategy": args.strategy, "num_queries": victim_api.query_count,
+                    "victim_accuracy": round(victim_acc, 2), "substitute_accuracy": round(sub_acc, 2),
+                    "fidelity": round(fidelity, 2)}
         with open(args.output, "w") as f:
-            json.dump({"experiment": "model_extraction",
-                        "timestamp": datetime.now().isoformat(), **results}, f, indent=2)
+            json.dump(results, f, indent=2)
+        logger.info(f"Results saved → {args.output}")
 
-    print("\n" + "=" * 60)
+    logger.info("=" * 60)
+    logger.info("Model extraction test complete")
+    logger.info("=" * 60)
 
 
 if __name__ == "__main__":

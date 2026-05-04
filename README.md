@@ -89,6 +89,20 @@ bbap-sec-ai-attack-lab/
     └── test_attacks.py          # Unit tests
 ```
 
+
+```
+logs/
+├── adversarial.log          ← all adversarial runs appended here
+├── data_poisoning.log       ← all poisoning runs appended here
+├── evasion.log
+├── model_extraction.log
+├── prompt_injection.log
+├── target_model.log
+├── system.log
+├── webapp.log
+└── pipeline.log             ← everything combined, all modules
+```
+
 ---
 
 ## 🚀 Quick Start
@@ -110,11 +124,9 @@ Open the dashboard at `http://localhost:5000`
 git clone https://github.com/bbap-sec/ai-attack-lab.git
 cd ai-attack-lab
 
-
-
 # Create virtual environment
 ## with conda
-conda create -n bbap-sec python=3.10 -y
+conda create -n bbap-sec python=3.12 -y
 conda activate bbap-sec
 
 ## with python
@@ -143,6 +155,27 @@ python -m src.attacks.evasion --target invoice_classifier
 python -m src.attacks.model_extraction --queries 1000 --victim-url http://localhost:8080/predict
 python -m src.attacks.prompt_injection --test-suite all
 ```
+
+# Atlas module
+
+```
+python -m src.atlas.atlas_cli stats                    # DB statistics
+python -m src.atlas.atlas_cli tactics                  # List all 16 tactics
+python -m src.atlas.atlas_cli lookup AML.T0043         # Full detail on any ID
+python -m src.atlas.atlas_cli search "prompt injection" # Keyword search
+python -m src.atlas.atlas_cli mapping adversarial      # BBAP-Sec → ATLAS mapping
+python -m src.atlas.atlas_cli mapping all              # All 5 modules mapped
+python -m src.atlas.atlas_cli chain AML.CS0000         # Attack chain from case study
+python -m src.atlas.atlas_cli mitigations AML.T0043    # Defenses for a technique
+python -m src.atlas.atlas_cli coverage                 # Tactic coverage gap analysis
+python -m src.atlas.atlas_cli report --output r.json   # Full JSON report
+
+
+
+```
+
+
+
 
 ---
 
@@ -323,7 +356,7 @@ This lab maps to industry-standard AI security frameworks:
 ---
 
 <p align="center">
-  <img src="assets/logo.png" alt="BBAP-Sec" width="120"/><br/>
+  <img src="assets/BBAP-Sec-final.png" alt="BBAP-Sec" width="120"/><br/>
   <strong>BBAP-Sec</strong> — Building Better AI Protection<br/>
   <em>Educational AI Security Research</em>
 </p>

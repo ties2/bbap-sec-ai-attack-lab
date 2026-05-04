@@ -17,209 +17,298 @@
                 </div>
             </div>
             <nav>
-                <a href="#attacks" class="nav-link active">Attacks</a>
-                <a href="#results" class="nav-link">Results</a>
-                <a href="#checklists" class="nav-link">Checklists</a>
+                <a href="#attacks" class="nav-link active" onclick="showTab('attacks')">Attacks</a>
+                <a href="#atlas" class="nav-link" onclick="showTab('atlas')">🛡️ ATLAS</a>
+                <a href="#results" class="nav-link" onclick="showTab('results')">Results</a>
+                <a href="#checklists" class="nav-link" onclick="showTab('checklists')">Checklists</a>
             </nav>
         </div>
     </header>
 
     <main>
-        <!-- Attack Modules -->
-        <section id="attacks">
+        <!-- ═══ ATTACKS TAB ═══ -->
+        <section id="attacks" class="tab-content">
             <h2 class="section-title">Attack Modules</h2>
             <div class="card-grid" id="attack-grid"></div>
-        </section>
-
-        <!-- Run Panel -->
-        <section id="run-panel" class="hidden">
-            <div class="panel">
-                <div class="panel-header">
-                    <h3 id="panel-title">Configure Attack</h3>
-                    <button class="btn-close" onclick="closePanel()">✕</button>
-                </div>
-                <div id="panel-form"></div>
-                <div class="panel-actions">
-                    <button class="btn-primary" onclick="runAttack()">▶ Run Attack</button>
-                </div>
-                <div id="panel-output" class="hidden">
-                    <pre id="output-text"></pre>
+            <!-- Run Panel -->
+            <div id="run-panel" class="hidden">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3 id="panel-title">Configure Attack</h3>
+                        <button class="btn-close" onclick="closePanel()">✕</button>
+                    </div>
+                    <div id="panel-form"></div>
+                    <div class="panel-actions">
+                        <button class="btn-primary" onclick="runAttack()">▶ Run Attack</button>
+                    </div>
+                    <div id="panel-output" class="hidden"><pre id="output-text"></pre></div>
                 </div>
             </div>
         </section>
 
-        <!-- Results -->
-        <section id="results">
+        <!-- ═══ ATLAS TAB ═══ -->
+        <section id="atlas" class="tab-content hidden">
+            <h2 class="section-title">MITRE ATLAS — Threat Intelligence</h2>
+            <div class="atlas-stats" id="atlas-stats"><p class="muted">Loading ATLAS data...</p></div>
+
+            <!-- Search -->
+            <div class="atlas-search-row">
+                <input type="text" id="atlas-q" placeholder="Search techniques, mitigations, case studies..." onkeydown="if(event.key==='Enter')atlasSearch()">
+                <button class="btn-primary" onclick="atlasSearch()">Search ATLAS</button>
+            </div>
+            <div id="atlas-search-results"></div>
+
+            <!-- Module → ATLAS Mappings -->
+            <h3 class="section-title" style="margin-top:28px">Your Modules → ATLAS Techniques</h3>
+            <div class="atlas-module-tabs" id="atlas-mod-tabs"></div>
+            <div id="atlas-mapping-detail"></div>
+
+            <!-- Coverage Matrix -->
+            <h3 class="section-title" style="margin-top:28px">Tactic Coverage Matrix</h3>
+            <div id="atlas-coverage"></div>
+
+            <!-- Technique / Case Study detail popup -->
+            <div id="atlas-detail-overlay" class="hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+                <div class="atlas-detail-panel" id="atlas-detail-content"></div>
+            </div>
+        </section>
+
+        <!-- ═══ RESULTS TAB ═══ -->
+        <section id="results" class="tab-content hidden">
             <h2 class="section-title">Recent Results</h2>
-            <div id="results-list" class="results-container">
-                <p class="muted">Run an attack to see results here.</p>
-            </div>
+            <div id="results-list" class="results-container"><p class="muted">Run an attack to see results here.</p></div>
         </section>
 
-        <!-- Checklists -->
-        <section id="checklists">
+        <!-- ═══ CHECKLISTS TAB ═══ -->
+        <section id="checklists" class="tab-content hidden">
             <h2 class="section-title">Security Checklists</h2>
             <div id="checklist-list" class="checklist-container"></div>
         </section>
     </main>
 
-    <footer>
-        <p>BBAP-Sec AI Attack Lab v1.0 — Educational Use Only</p>
-    </footer>
+    <footer><p>BBAP-Sec AI Attack Lab v1.0 — Powered by MITRE ATLAS v5.6.0 — Educational Use Only</p></footer>
 
-    <script>
-        let currentAttack = null;
+<script>
+let currentAttack = null;
 
-        async function loadAttacks() {
-            const res = await fetch('/api/attacks');
-            const attacks = await res.json();
-            const grid = document.getElementById('attack-grid');
-            grid.innerHTML = attacks.map(a => `
-                <div class="card" onclick="openPanel('${a.id}', '${a.name}')">
-                    <div class="card-icon">${a.icon}</div>
-                    <h3>${a.name}</h3>
-                    <p>${a.description}</p>
-                    <span class="card-badge">Run →</span>
-                </div>
-            `).join('');
-        }
+// ── Tab Navigation ──
+function showTab(id) {
+    document.querySelectorAll('.tab-content').forEach(s => s.classList.add('hidden'));
+    document.getElementById(id).classList.remove('hidden');
+    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+    document.querySelector(`[href="#${id}"]`).classList.add('active');
+    if (id === 'atlas' && !window._atlasLoaded) loadAtlas();
+}
 
-        function openPanel(id, name) {
-            currentAttack = id;
-            document.getElementById('panel-title').textContent = name;
-            document.getElementById('run-panel').classList.remove('hidden');
-            document.getElementById('panel-output').classList.add('hidden');
+// ── Attacks Tab ──
+async function loadAttacks() {
+    const attacks = await (await fetch('/api/attacks')).json();
+    document.getElementById('attack-grid').innerHTML = attacks.map(a => `
+        <div class="card" onclick="openPanel('${a.id}','${a.name}')">
+            <div class="card-icon">${a.icon}</div><h3>${a.name}</h3><p>${a.description}</p>
+            <span class="card-badge">Run →</span>
+        </div>`).join('');
+}
+function openPanel(id, name) {
+    currentAttack = id;
+    document.getElementById('panel-title').textContent = name;
+    document.getElementById('run-panel').classList.remove('hidden');
+    document.getElementById('panel-output').classList.add('hidden');
+    const F = {
+        adversarial: `<label>Attack<select id="p-attack_type"><option value="both">Both</option><option value="fgsm">FGSM</option><option value="pgd">PGD</option></select></label><label>Epsilon<input type="number" id="p-epsilon" value="0.03" step="0.01"></label><label>Dataset<select id="p-dataset"><option>mnist</option><option>cifar10</option></select></label>`,
+        data_poisoning: `<label>Strategy<select id="p-strategy"><option value="label_flip">Label Flip</option><option value="backdoor">Backdoor</option></select></label><label>Poison Rate<input type="number" id="p-poison_rate" value="0.1" step="0.05"></label><label>Dataset<select id="p-dataset"><option>mnist</option><option>cifar10</option></select></label>`,
+        evasion: `<label>Method<select id="p-method"><option value="all">All</option><option value="pixel">Pixel</option><option value="noise">Noise</option><option value="spatial">Spatial</option></select></label><label>Dataset<select id="p-dataset"><option>mnist</option><option>cifar10</option></select></label>`,
+        model_extraction: `<label>Strategy<select id="p-strategy"><option value="random">Random</option><option value="active">Active Learning</option></select></label><label>Queries<input type="number" id="p-num_queries" value="1000" step="100"></label><label>Dataset<select id="p-dataset"><option>mnist</option><option>cifar10</option></select></label>`,
+        prompt_injection: `<label>Suite<select id="p-test_suite"><option value="all">All</option><option value="direct_override">Direct</option><option value="indirect_context">Indirect</option><option value="data_exfiltration">Exfiltration</option><option value="instruction_hierarchy">Hierarchy</option></select></label>`,
+    };
+    document.getElementById('panel-form').innerHTML = F[id] || '';
+}
+function closePanel() { document.getElementById('run-panel').classList.add('hidden'); }
+async function runAttack() {
+    const p = {}; document.querySelectorAll('#panel-form input,#panel-form select').forEach(e => { p[e.id.replace('p-','')] = e.type==='number'?parseFloat(e.value):e.value; });
+    const o = document.getElementById('panel-output'), t = document.getElementById('output-text');
+    o.classList.remove('hidden'); t.textContent = '⏳ Running...\n';
+    const d = await (await fetch(`/api/run/${currentAttack}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)})).json();
+    if (d.job_id) { const iv = setInterval(async()=>{const s=await(await fetch(`/api/status/${d.job_id}`)).json();if(s.status==='completed'){clearInterval(iv);t.textContent=s.output||'✅ Done';loadResults();}else if(s.status==='failed'||s.status==='timeout'){clearInterval(iv);t.textContent='❌ '+s.status+'\n'+(s.error||'');}},2000); }
+}
 
-            const forms = {
-                adversarial: `
-                    <label>Attack Type<select id="p-attack_type">
-                        <option value="both">Both (FGSM + PGD)</option>
-                        <option value="fgsm">FGSM only</option>
-                        <option value="pgd">PGD only</option>
-                    </select></label>
-                    <label>Epsilon <input type="number" id="p-epsilon" value="0.03" step="0.01" min="0" max="1"></label>
-                    <label>Dataset<select id="p-dataset"><option value="mnist">MNIST</option><option value="cifar10">CIFAR-10</option></select></label>`,
-                data_poisoning: `
-                    <label>Strategy<select id="p-strategy">
-                        <option value="label_flip">Label Flip</option>
-                        <option value="backdoor">Backdoor Injection</option>
-                    </select></label>
-                    <label>Poison Rate <input type="number" id="p-poison_rate" value="0.1" step="0.05" min="0" max="1"></label>
-                    <label>Dataset<select id="p-dataset"><option value="mnist">MNIST</option><option value="cifar10">CIFAR-10</option></select></label>`,
-                evasion: `
-                    <label>Method<select id="p-method">
-                        <option value="all">All Methods</option>
-                        <option value="pixel">Pixel Perturbation</option>
-                        <option value="noise">Feature Noise</option>
-                        <option value="spatial">Spatial Transform</option>
-                    </select></label>
-                    <label>Dataset<select id="p-dataset"><option value="mnist">MNIST</option><option value="cifar10">CIFAR-10</option></select></label>`,
-                model_extraction: `
-                    <label>Strategy<select id="p-strategy">
-                        <option value="random">Random Queries</option>
-                        <option value="active">Active Learning</option>
-                    </select></label>
-                    <label>Query Budget <input type="number" id="p-num_queries" value="1000" step="100" min="100"></label>
-                    <label>Dataset<select id="p-dataset"><option value="mnist">MNIST</option><option value="cifar10">CIFAR-10</option></select></label>`,
-                prompt_injection: `
-                    <label>Test Suite<select id="p-test_suite">
-                        <option value="all">All Suites</option>
-                        <option value="direct_override">Direct Override</option>
-                        <option value="indirect_context">Indirect Context</option>
-                        <option value="data_exfiltration">Data Exfiltration</option>
-                        <option value="instruction_hierarchy">Instruction Hierarchy</option>
-                    </select></label>`,
-            };
-            document.getElementById('panel-form').innerHTML = forms[id] || '';
-        }
+// ── Results & Checklists ──
+async function loadResults() {
+    const r = await (await fetch('/api/results')).json(), c = document.getElementById('results-list');
+    c.innerHTML = r.length ? r.map(x=>`<div class="result-card"><div class="result-header"><strong>${x.data.experiment||x.file}</strong><span class="result-time">${x.data.timestamp||''}</span></div><pre class="result-data">${JSON.stringify(x.data,null,2)}</pre></div>`).join('') : '<p class="muted">No results yet.</p>';
+}
+async function loadChecklists() {
+    const items = await (await fetch('/api/checklists')).json();
+    document.getElementById('checklist-list').innerHTML = items.map(c=>`<details class="checklist-item"><summary>${c.name.replace(/_/g,' ').replace(/^\d+\s*/,'')}</summary><pre class="checklist-content">${c.content}</pre></details>`).join('');
+}
 
-        function closePanel() {
-            document.getElementById('run-panel').classList.add('hidden');
-        }
+// ══════════════════════════════════════
+//  ATLAS TAB — Full Integration
+// ══════════════════════════════════════
 
-        async function runAttack() {
-            const params = {};
-            document.querySelectorAll('#panel-form input, #panel-form select').forEach(el => {
-                const key = el.id.replace('p-', '');
-                params[key] = el.type === 'number' ? parseFloat(el.value) : el.value;
-            });
+const MOD_META = {
+    adversarial:      {icon:'🎯', label:'Adversarial'},
+    data_poisoning:   {icon:'☠️', label:'Data Poisoning'},
+    evasion:          {icon:'🕵️', label:'Evasion'},
+    model_extraction: {icon:'🔓', label:'Model Extraction'},
+    prompt_injection: {icon:'💉', label:'Prompt Injection'},
+};
 
-            const outputDiv = document.getElementById('panel-output');
-            const outputText = document.getElementById('output-text');
-            outputDiv.classList.remove('hidden');
-            outputText.textContent = '⏳ Running attack... (this may take a few minutes)\n';
+async function loadAtlas() {
+    window._atlasLoaded = true;
 
-            const res = await fetch(`/api/run/${currentAttack}`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(params),
-            });
-            const data = await res.json();
+    // Stats
+    const stats = await (await fetch('/api/atlas/stats')).json();
+    document.getElementById('atlas-stats').innerHTML = `
+        <div class="stat"><div class="stat-label">Version</div><div class="stat-value emerald">v${stats.version}</div></div>
+        <div class="stat"><div class="stat-label">Tactics</div><div class="stat-value gold">${stats.tactics}</div></div>
+        <div class="stat"><div class="stat-label">Techniques</div><div class="stat-value copper">${stats.techniques_total}</div></div>
+        <div class="stat"><div class="stat-label">Mitigations</div><div class="stat-value">${stats.mitigations}</div></div>
+        <div class="stat"><div class="stat-label">Case Studies</div><div class="stat-value">${stats.case_studies}</div></div>`;
 
-            if (data.job_id) {
-                pollJob(data.job_id);
-            }
-        }
+    // Module tabs
+    document.getElementById('atlas-mod-tabs').innerHTML = Object.entries(MOD_META).map(([k,v]) =>
+        `<button class="atlas-tab-btn" onclick="showAtlasMapping('${k}',this)">${v.icon} ${v.label}</button>`
+    ).join('');
 
-        async function pollJob(jobId) {
-            const outputText = document.getElementById('output-text');
-            const interval = setInterval(async () => {
-                const res = await fetch(`/api/status/${jobId}`);
-                const status = await res.json();
-                if (status.status === 'completed') {
-                    clearInterval(interval);
-                    outputText.textContent = status.output || '✅ Complete. Check Results tab.';
-                    loadResults();
-                } else if (status.status === 'failed' || status.status === 'timeout') {
-                    clearInterval(interval);
-                    outputText.textContent = `❌ ${status.status}\n${status.error || ''}`;
-                }
-            }, 2000);
-        }
+    // Coverage
+    loadCoverage();
+}
 
-        async function loadResults() {
-            const res = await fetch('/api/results');
-            const results = await res.json();
-            const container = document.getElementById('results-list');
-            if (results.length === 0) {
-                container.innerHTML = '<p class="muted">No results yet. Run an attack first.</p>';
-                return;
-            }
-            container.innerHTML = results.map(r => `
-                <div class="result-card">
-                    <div class="result-header">
-                        <strong>${r.data.experiment || r.file}</strong>
-                        <span class="result-time">${r.data.timestamp || ''}</span>
-                    </div>
-                    <pre class="result-data">${JSON.stringify(r.data, null, 2)}</pre>
-                </div>
-            `).join('');
-        }
+async function showAtlasMapping(mod, btn) {
+    document.querySelectorAll('.atlas-tab-btn').forEach(b=>b.classList.remove('active'));
+    if(btn) btn.classList.add('active');
 
-        async function loadChecklists() {
-            const res = await fetch('/api/checklists');
-            const items = await res.json();
-            const container = document.getElementById('checklist-list');
-            container.innerHTML = items.map(c => `
-                <details class="checklist-item">
-                    <summary>${c.name.replace(/_/g, ' ').replace(/^\d+\s*/, '')}</summary>
-                    <pre class="checklist-content">${c.content}</pre>
-                </details>
-            `).join('');
-        }
+    const m = await (await fetch(`/api/atlas/mapping/${mod}`)).json();
+    const el = document.getElementById('atlas-mapping-detail');
+    el.innerHTML = `
+        <div class="atlas-map-card">
+            <div class="atlas-map-header">${MOD_META[mod].icon} ${m.name}</div>
+            <p class="muted">${m.description}</p>
 
-        // Nav
-        document.querySelectorAll('.nav-link').forEach(link => {
-            link.addEventListener('click', e => {
-                document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-                e.target.classList.add('active');
-            });
-        });
+            <div class="atlas-map-section">
+                <h4>🎯 Techniques (${m.techniques.length})</h4>
+                ${m.techniques.map(t => `
+                    <div class="atlas-item clickable" onclick="showTechDetail('${t.id}')">
+                        <div class="atlas-item-id">${t.id}</div>
+                        <div class="atlas-item-body">
+                            <strong>${t.name}</strong>
+                            <div class="atlas-relevance">${t.relevance}</div>
+                            ${t.bbap_functions.length ? `<div class="atlas-funcs">→ ${t.bbap_functions.join(', ')}</div>` : ''}
+                        </div>
+                    </div>`).join('')}
+            </div>
 
-        // Init
-        loadAttacks();
-        loadResults();
-        loadChecklists();
-    </script>
+            <div class="atlas-map-section">
+                <h4>🛡️ Mitigations (${m.mitigations.length})</h4>
+                ${m.mitigations.map(mi => `
+                    <div class="atlas-item">
+                        <div class="atlas-item-id">${mi.id}</div>
+                        <div class="atlas-item-body">
+                            <strong>${mi.name}</strong>
+                            <div class="muted">${mi.description}</div>
+                        </div>
+                    </div>`).join('')}
+            </div>
+
+            <div class="atlas-map-section">
+                <h4>📋 Case Studies (${m.case_studies.length})</h4>
+                ${m.case_studies.map(cs => `
+                    <div class="atlas-item clickable" onclick="showCaseStudy('${cs.id}')">
+                        <div class="atlas-item-id">${cs.id}</div>
+                        <div class="atlas-item-body">
+                            <strong>${cs.name}</strong>
+                            <div class="muted">${cs.summary}</div>
+                        </div>
+                    </div>`).join('')}
+            </div>
+        </div>`;
+}
+
+async function loadCoverage() {
+    const cov = await (await fetch('/api/atlas/coverage')).json();
+    const tactics = await (await fetch('/api/atlas/tactics')).json();
+    const rows = tactics.map(t => {
+        const mods = cov[t.name] || [];
+        const covered = mods.length > 0;
+        return `<div class="cov-row ${covered?'covered':'uncovered'}">
+            <div class="cov-tactic">${t.id}</div>
+            <div class="cov-name">${t.name}</div>
+            <div class="cov-mods">${covered ? mods.map(m=>`<span class="cov-tag">${MOD_META[m]?.icon||''} ${m.replace(/_/g,' ')}</span>`).join('') : '<span class="cov-none">not covered</span>'}</div>
+        </div>`;
+    });
+    document.getElementById('atlas-coverage').innerHTML = `<div class="cov-table">${rows.join('')}</div>`;
+}
+
+// ── ATLAS Detail Popups ──
+
+async function showTechDetail(techId) {
+    const data = await (await fetch(`/api/atlas/technique/${techId}`)).json();
+    const t = data.technique;
+    const overlay = document.getElementById('atlas-detail-overlay');
+    const content = document.getElementById('atlas-detail-content');
+    content.innerHTML = `
+        <div class="detail-header"><span class="detail-id">${t.id}</span><h3>${t.name}</h3>
+            <button class="btn-close" onclick="document.getElementById('atlas-detail-overlay').classList.add('hidden')">✕</button></div>
+        <div class="detail-body">
+            <p>${t.description || 'No description available.'}</p>
+            ${t.tactics ? `<div class="detail-field"><strong>Tactics:</strong> ${t.tactics.join(', ')}</div>` : ''}
+            ${t.maturity ? `<div class="detail-field"><strong>Maturity:</strong> ${t.maturity}</div>` : ''}
+            ${data.subtechniques.length ? `<div class="detail-field"><strong>Sub-techniques (${data.subtechniques.length}):</strong><ul>${data.subtechniques.map(s=>`<li><span class="atlas-item-id" style="display:inline">${s.id}</span> ${s.name}</li>`).join('')}</ul></div>` : ''}
+            ${data.mitigations.length ? `<div class="detail-field"><strong>Mitigations (${data.mitigations.length}):</strong><ul>${data.mitigations.map(m=>`<li><span class="atlas-item-id" style="display:inline">${m.id}</span> ${m.name}</li>`).join('')}</ul></div>` : ''}
+            <a href="https://atlas.mitre.org/techniques/${t.id}" target="_blank" class="btn-link">View on atlas.mitre.org →</a>
+        </div>`;
+    overlay.classList.remove('hidden');
+}
+
+async function showCaseStudy(csId) {
+    const data = await (await fetch(`/api/atlas/case-study/${csId}`)).json();
+    const cs = data.case_study;
+    const chain = data.attack_chain || [];
+    const overlay = document.getElementById('atlas-detail-overlay');
+    const content = document.getElementById('atlas-detail-content');
+    content.innerHTML = `
+        <div class="detail-header"><span class="detail-id">${cs.id}</span><h3>${cs.name}</h3>
+            <button class="btn-close" onclick="document.getElementById('atlas-detail-overlay').classList.add('hidden')">✕</button></div>
+        <div class="detail-body">
+            <p>${cs.summary || ''}</p>
+            ${cs['incident-date'] ? `<div class="detail-field"><strong>Date:</strong> ${cs['incident-date']}</div>` : ''}
+            ${chain.length ? `
+                <div class="detail-field"><strong>Attack Chain (${chain.length} steps):</strong></div>
+                <div class="chain-container">${chain.map((s,i) => `
+                    <div class="chain-step">
+                        <div class="chain-num">${i+1}</div>
+                        <div class="chain-body">
+                            <div class="chain-tactic">${s.tactic_name}</div>
+                            <div class="chain-tech clickable" onclick="showTechDetail('${s.technique_id}')">${s.technique_id}: ${s.technique_name}</div>
+                            <div class="chain-desc">${(s.description||'').substring(0,200)}${s.description&&s.description.length>200?'...':''}</div>
+                        </div>
+                    </div>`).join('')}</div>` : ''}
+            <a href="https://atlas.mitre.org/studies/${cs.id}" target="_blank" class="btn-link">View on atlas.mitre.org →</a>
+        </div>`;
+    overlay.classList.remove('hidden');
+}
+
+// ── ATLAS Search ──
+
+async function atlasSearch() {
+    const q = document.getElementById('atlas-q').value.trim();
+    if (!q) return;
+    const data = await (await fetch(`/api/atlas/search?q=${encodeURIComponent(q)}`)).json();
+    const el = document.getElementById('atlas-search-results');
+    const techs = data.techniques || [], cases = data.case_studies || [], mits = data.mitigations || [];
+    if (!techs.length && !cases.length && !mits.length) { el.innerHTML = '<p class="muted">No results found.</p>'; return; }
+    el.innerHTML = `
+        ${techs.length ? `<div class="search-group"><h4>Techniques (${techs.length})</h4>${techs.map(t=>`
+            <div class="atlas-item clickable" onclick="showTechDetail('${t.id}')"><div class="atlas-item-id">${t.id}</div><div class="atlas-item-body"><strong>${t.name}</strong></div></div>`).join('')}</div>` : ''}
+        ${mits.length ? `<div class="search-group"><h4>Mitigations (${mits.length})</h4>${mits.map(m=>`
+            <div class="atlas-item"><div class="atlas-item-id">${m.id}</div><div class="atlas-item-body"><strong>${m.name}</strong></div></div>`).join('')}</div>` : ''}
+        ${cases.length ? `<div class="search-group"><h4>Case Studies (${cases.length})</h4>${cases.map(c=>`
+            <div class="atlas-item clickable" onclick="showCaseStudy('${c.id}')"><div class="atlas-item-id">${c.id}</div><div class="atlas-item-body"><strong>${c.name}</strong></div></div>`).join('')}</div>` : ''}`;
+}
+
+// Init
+loadAttacks(); loadResults(); loadChecklists();
+</script>
 </body>
 </html>

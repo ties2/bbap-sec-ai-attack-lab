@@ -7,8 +7,13 @@ All datasets are freely available for research/educational use.
 
 import os
 from pathlib import Path
+import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from src.utils.logger import setup_logger, get_logger, get_project_root, get_dataset_dir
+
+logger = get_logger("dataset_downloader")
 def download_all(data_dir="datasets/data"):
     Path(data_dir).mkdir(parents=True, exist_ok=True)
     print("=" * 50)
@@ -23,6 +28,9 @@ def download_all(data_dir="datasets/data"):
         print("    Done.")
 
         print("  [2/2] Downloading CIFAR-10...")
+        # Override with a different, active mirror
+        datasets.CIFAR10.url = "https://data.brainchip.com/dataset-mirror/cifar10/cifar-10-python.tar.gz"
+
         datasets.CIFAR10(data_dir, train=True, download=True)
         print("    Done.")
     except ImportError:
