@@ -27,7 +27,7 @@
 
 ---
 
-## 📋 Overview
+##  Overview
 
 **BBAP-Sec AI Attack Lab** is a comprehensive, hands-on pipeline for learning and testing the security of AI/ML systems. It covers the five critical attack surfaces in modern AI:
 
@@ -105,7 +105,7 @@ logs/
 
 ---
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Option A — Docker (Recommended)
 
@@ -179,7 +179,7 @@ python -m src.atlas.atlas_cli report --output r.json   # Full JSON report
 
 ---
 
-## 📦 Public Datasets Used
+##  Public Datasets Used
 
 | Dataset | Purpose | Source |
 |---------|---------|--------|
@@ -191,7 +191,7 @@ python -m src.atlas.atlas_cli report --output r.json   # Full JSON report
 
 ---
 
-## 🔬 Attack Modules — Deep Dive
+##  Attack Modules — Deep Dive
 
 ### 1. Adversarial Attacks (`src/attacks/adversarial.py`)
 
@@ -239,7 +239,7 @@ Test LLM systems against:
 
 ---
 
-## 🛡️ Defense Modules (`src/defenses/`)
+##  Defense Modules (`src/defenses/`)
 
 Each attack module has corresponding defenses:
 
@@ -253,7 +253,7 @@ Each attack module has corresponding defenses:
 
 ---
 
-## ✅ Checklists
+## Checklists
 
 Each attack category has a structured assessment checklist in `checklists/`. Use these for systematic evaluation:
 
@@ -275,7 +275,7 @@ Each checklist follows the format:
 
 ---
 
-## 🌐 Web Dashboard
+##  Web Dashboard
 
 The web dashboard provides a visual interface for running attacks and viewing results.
 
@@ -290,7 +290,7 @@ The web dashboard provides a visual interface for running attacks and viewing re
 
 ---
 
-## 🐳 Docker
+##  Docker
 
 ```bash
 # Build and run
@@ -308,7 +308,7 @@ docker-compose exec lab python -m src.attacks.adversarial --attack fgsm
 
 ---
 
-## 📊 Metrics & Reporting
+##  Metrics & Reporting
 
 | Metric | Description | Used In |
 |--------|-------------|---------|
@@ -321,7 +321,7 @@ docker-compose exec lab python -m src.attacks.adversarial --attack fgsm
 
 ---
 
-## 🗺️ Alignment with Frameworks
+##  Alignment with Frameworks
 
 This lab maps to industry-standard AI security frameworks:
 
@@ -335,7 +335,7 @@ This lab maps to industry-standard AI security frameworks:
 
 ---
 
-## 🤝 Contributing
+##  Contributing
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/new-attack`
@@ -345,7 +345,7 @@ This lab maps to industry-standard AI security frameworks:
 
 ---
 
-## 📚 References
+##  References
 
 - Goodfellow et al., "Explaining and Harnessing Adversarial Examples" (FGSM)
 - Madry et al., "Towards Deep Learning Models Resistant to Adversarial Attacks" (PGD)
