@@ -267,11 +267,11 @@ checklists/
 ```
 
 Each checklist follows the format:
-- ☐ **Pre-test setup** — Environment and model preparation
-- ☐ **Attack execution** — Step-by-step attack procedure
-- ☐ **Measurement** — Metrics to record
-- ☐ **Defense validation** — Verify countermeasures
-- ☐ **Reporting** — Document findings
+-  **Pre-test setup** — Environment and model preparation
+-  **Attack execution** — Step-by-step attack procedure
+-  **Measurement** — Metrics to record
+-  **Defense validation** — Verify countermeasures
+-  **Reporting** — Document findings
 
 ---
 
