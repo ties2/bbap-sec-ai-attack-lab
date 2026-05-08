@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/BBAP-Sec-final.png" alt="BBAP-Sec Logo" width="280"/>
+  <img src="frontend/public/logo.png" alt="BBAP-Sec Logo" width="280"/>
 </p>
 
 <h1 align="center">BBAP-Sec AI Attack Lab</h1>
@@ -139,6 +139,10 @@ pip install -r requirements.txt
 
 # Download public datasets
 python datasets/download_datasets.py
+
+# start project
+cd frontend
+npm run build
 
 # Run the web dashboard
 python webapp/app.py
@@ -356,7 +360,7 @@ This lab maps to industry-standard AI security frameworks:
 ---
 
 <p align="center">
-  <img src="assets/BBAP-Sec-final.png" alt="BBAP-Sec" width="120"/><br/>
+  <img src="frontend/public/logo.png" alt="BBAP-Sec" width="120"/><br/>
   <strong>BBAP-Sec</strong> — Building Better AI Protection<br/>
   <em>Educational AI Security Research</em>
 </p>

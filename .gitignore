@@ -12,6 +12,7 @@ __pycache__/
 dist/
 build/
 eggs/
+archive/
 *.whl
 pip-log.txt
 pip-delete-this-directory.txt
