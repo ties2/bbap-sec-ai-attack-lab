@@ -1,0 +1,15 @@
+# BBAP-Sec Sandbox — Dependencies
+flask>=3.0
+numpy>=1.24
+scipy>=1.10
+
+# ML Frameworks (install what you need — full install is ~4GB)
+torch>=2.0
+torchvision>=0.15
+onnxruntime>=1.16
+tensorflow-cpu>=2.14
+scikit-learn>=1.3
+joblib>=1.3
+
+# Optional: SafeTensors support
+# safetensors>=0.4
