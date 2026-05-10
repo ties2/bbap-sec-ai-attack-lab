@@ -65,6 +65,14 @@ If running the webapp directly (not in Docker):
 ```bash
 # No changes needed — Docker SDK connects via /var/run/docker.sock by default
 python -m webapp.app
+
+
+# Option A: module notation
+python -m webapp.app
+
+# Option B: direct execution
+python webapp/app.py
+
 ```
 
 If running the webapp in Docker, mount the socket (already in docker-compose.yml):
@@ -105,7 +113,7 @@ And add these methods:
 ```python
 def save_sandbox(self, sandbox_dict):
     self.conn.execute(
-        '''INSERT INTO sandboxes (id, engagement_id, container_id, status,
+        '''INSERT INTO sandboxes (id, project_id, container_id, status,
            framework, model_filename, model_size_bytes, port, gpu_enabled)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
         (sandbox_dict['id'], sandbox_dict['engagement_id'],
@@ -167,6 +175,12 @@ curl -X POST http://localhost:5000/api/v2/sandbox/create \
   -F "gpu=false"
 ```
 
+```
+# check ststus of 
+docker ps | grep bbap
+```
+
+
 ### Create Sandbox — Response
 
 ```json
@@ -199,6 +213,121 @@ curl -X POST http://localhost:5000/api/v2/sandbox/1/predict \
 curl -X POST http://localhost:5000/api/v2/sandbox/1/gradient \
   -H "Content-Type: application/json" \
   -d '{"input": [[[0.5, 0.3, ...], ...]], "target_class": 7}'
+```
+
+# clean sandbox
+curl -X DELETE http://localhost:5000/api/v2/sandbox/1
+
+
+بسیار عالی! حالا که تمام باگ‌ها را برطرف کردیم و سیستم به صورت پایدار و بی‌نقص کار می‌کند، داشتن یک مستندات (Documentation) تمیز برای `README.md` ضروری است تا اگر در آینده خودتان یا همکارانتان خواستید آن را اجرا کنید، درگیر این دردسرها نشوید.
+
+متن زیر با فرمت استاندارد مارک‌داون (Markdown) آماده شده است. می‌توانید آن را مستقیماً کپی کرده و در فایل `README.md` پروژه خود (مثلاً در بخش **Sandbox Setup**) قرار دهید:
+
+---
+
+```markdown
+## 🧪 Sandbox Setup & Execution
+
+The BBAP-Sec Sandbox provides an isolated, containerized environment (Docker) to safely load ML models and expose them via a unified API for security testing and adversarial attacks.
+
+### Prerequisites
+- Docker Desktop installed and running.
+- Python 3.11+ virtual environment active.
+- At least one Project created in the Web Dashboard (so `project_id=1` exists in the database).
+
+---
+
+### Step 1: Download the Target Model
+Before starting the sandbox, download the official pre-trained model (e.g., ResNet-50). Run the following script from the project root to securely download and save the model to the `models/` directory:
+
+```python
+# Save as: download_model.py and run: python download_model.py
+import torch
+import torchvision.models as models
+import os
+import ssl
+
+# Bypass SSL verification issues on macOS
+ssl._create_default_https_context = ssl._create_unverified_context
+
+print('Downloading official ResNet-50...')
+model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+os.makedirs('models', exist_ok=True)
+torch.save(model, 'models/resnet50.pt')
+print('Success! Model saved to models/resnet50.pt')
+
+```
+
+### process 2: Build the Sandbox Docker Image
+
+Build the isolated container image that contains PyTorch, Flask, and the required APIs. This only needs to be done once (or whenever `requirements.txt` changes).
+
+```bash
+cd sandbox
+docker build -t bbap-sec-sandbox:latest .
+cd ..
+
+```
+
+### process 3: Start the Main Web Application
+
+The main Flask app manages the lifecycle of the sandbox containers. Start it in your primary terminal:
+
+```bash
+python -m webapp.app
+
+```
+
+### process 4: Spin Up the Sandbox Container
+
+Open a **new terminal window** and use the API to create and launch the sandbox. This will mount the model, allocate a port (e.g., 5100), and start the internal prediction server.
+
+```bash
+curl -X POST http://localhost:5000/api/v2/sandbox/create \
+  -F "file=@models/resnet50.pt" \
+  -F "project_id=1" \
+  -F "framework=pytorch" \
+  -F "gpu=false"
+
+```
+
+*Verify it's running by typing `docker ps`. You should see `bbap-sec-sandbox:latest` bound to `0.0.0.0:5100->5000/tcp`.*
+
+### process 5: Test the Inference API
+
+Ensure the model is loaded and correctly predicting inputs by sending a dummy image tensor (1, 3, 224, 224) to the sandbox proxy endpoint:
+
+```python
+# Save as: test_predict.py and run: python test_predict.py
+import requests
+import numpy as np
+
+dummy_image = np.random.rand(1, 3, 224, 224).tolist()
+response = requests.post(
+    "http://localhost:5000/api/v2/sandbox/1/predict",
+    json={"input": dummy_image}
+)
+
+print(f"Status: {response.status_code}")
+print("Response:", response.json())
+
+```
+# debug
+```angular2html
+docker ps -a | grep bbap
+# example a2dde5759499   bbap-sec-sandbox:latest   "python sandbox_api.…"   16 minutes ago   Up 16 minutes (healthy)   5000/tcp   bbap-sbx-002
+
+docker logs <CONTAINER_ID>
+# examle docker logs bbap-sbx-002
+```
+
+### process 6: Cleanup (Teardown)
+
+Once testing is complete, securely destroy the sandbox container to free up system resources:
+
+```bash
+curl -X DELETE http://localhost:5000/api/v2/sandbox/1
+
 ```
 
 ## Architecture

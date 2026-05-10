@@ -57,14 +57,14 @@ def create_sandbox():
     manager = get_manager()
 
     # Validate engagement_id
-    engagement_id = request.form.get("engagement_id")
-    if not engagement_id:
-        return jsonify({"error": "engagement_id is required"}), 400
+    project_id = request.form.get("project_id")
+    if not project_id:
+        return jsonify({"error": "project_id is required"}), 400
 
     try:
-        engagement_id = int(engagement_id)
+        project_id = int(project_id)
     except ValueError:
-        return jsonify({"error": "engagement_id must be an integer"}), 400
+        return jsonify({"error": "project_id must be an integer"}), 400
 
     # Check for file upload
     if "file" not in request.files:
@@ -83,7 +83,7 @@ def create_sandbox():
     filename = secure_filename(file.filename)
     upload_dir = os.path.join(UPLOAD_DIR, "uploads")
     os.makedirs(upload_dir, exist_ok=True)
-    filepath = os.path.join(upload_dir, f"eng{engagement_id}_{filename}")
+    filepath = os.path.join(upload_dir, f"eng{project_id}_{filename}")
     file.save(filepath)
 
     # Check file size
@@ -100,11 +100,11 @@ def create_sandbox():
     framework = request.form.get("framework", None)
     gpu = request.form.get("gpu", "false").lower() == "true"
 
-    logger.info(f"Creating sandbox: engagement={engagement_id}, file={filename}, framework={framework}, gpu={gpu}")
+    logger.info(f"Creating sandbox: project={project_id}, file={filename}, framework={framework}, gpu={gpu}")
 
     try:
         result = manager.create(
-            engagement_id=engagement_id,
+            project_id=project_id,
             model_path=filepath,
             framework=framework,
             gpu=gpu,
@@ -140,10 +140,10 @@ def destroy_sandbox(sandbox_id):
 
 @sandbox_bp.route("/list", methods=["GET"])
 def list_sandboxes():
-    """List all sandboxes, optionally filtered by engagement_id."""
+    """List all sandboxes, optionally filtered by project_id."""
     manager = get_manager()
-    engagement_id = request.args.get("engagement_id", type=int)
-    sandboxes = manager.list_sandboxes(engagement_id=engagement_id)
+    project_id = request.args.get("project_id", type=int)
+    sandboxes = manager.list_sandboxes(project_id=project_id)
     return jsonify({"sandboxes": sandboxes, "total": len(sandboxes)})
 
 

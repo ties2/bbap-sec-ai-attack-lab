@@ -45,10 +45,10 @@ SANDBOX_CPU_LIMIT = float(os.environ.get("SANDBOX_CPU_LIMIT", "2.0"))  # CPU cor
 class SandboxInfo:
     """Holds sandbox state and metadata."""
 
-    def __init__(self, sandbox_id, engagement_id, container_id, port,
+    def __init__(self, sandbox_id, project_id, container_id, port,
                  framework, model_filename, model_size, gpu_enabled=False):
         self.id = sandbox_id
-        self.engagement_id = engagement_id
+        self.project_id = project_id
         self.container_id = container_id
         self.port = port
         self.framework = framework
@@ -63,7 +63,7 @@ class SandboxInfo:
     def to_dict(self):
         return {
             "id": self.id,
-            "engagement_id": self.engagement_id,
+            "project_id": self.project_id,
             "container_id": self.container_id[:12] if self.container_id else None,
             "port": self.port,
             "framework": self.framework,
@@ -132,7 +132,7 @@ class SandboxManager:
                 return port
         raise RuntimeError("No free ports in sandbox range")
 
-    def create(self, engagement_id, model_path, framework=None, gpu=False):
+    def create(self, project_id, model_path, framework=None, gpu=False):
         """Create a new sandbox container.
 
         Args:
@@ -171,7 +171,7 @@ class SandboxManager:
 
         sandbox_info = SandboxInfo(
             sandbox_id=sandbox_id,
-            engagement_id=engagement_id,
+            project_id=project_id,
             container_id=None,
             port=port,
             framework=framework,
@@ -186,7 +186,7 @@ class SandboxManager:
                 "image": SANDBOX_IMAGE,
                 "name": f"bbap-sbx-{sandbox_id:03d}",
                 "detach": True,
-                "ports": {"5000/tcp": port},
+                "ports": {"5000/tcp": ('127.0.0.1', port)},
                 "volumes": {
                     os.path.abspath(model_dir): {
                         "bind": "/model",
@@ -201,10 +201,10 @@ class SandboxManager:
                 },
                 "mem_limit": SANDBOX_MEMORY_LIMIT,
                 "nano_cpus": int(SANDBOX_CPU_LIMIT * 1e9),
-                "network": SANDBOX_NETWORK,
+                # "network": SANDBOX_NETWORK,
                 "labels": {
                     "bbap-sec": "sandbox",
-                    "engagement_id": str(engagement_id),
+                    "project_id": str(project_id),
                     "sandbox_id": str(sandbox_id),
                 },
             }
@@ -215,6 +215,7 @@ class SandboxManager:
                 container_config["environment"]["NVIDIA_VISIBLE_DEVICES"] = "all"
 
             container = self._client.containers.run(**container_config)
+
             sandbox_info.container_id = container.id
             sandbox_info.status = "starting"
 
@@ -319,11 +320,11 @@ class SandboxManager:
 
         return info.to_dict()
 
-    def list_sandboxes(self, engagement_id=None):
+    def list_sandboxes(self, project_id=None):
         """List all sandboxes, optionally filtered by engagement."""
         sandboxes = list(self._sandboxes.values())
-        if engagement_id is not None:
-            sandboxes = [s for s in sandboxes if s.engagement_id == engagement_id]
+        if project_id is not None:
+            sandboxes = [s for s in sandboxes if s.project_id == project_id]
         return [s.to_dict() for s in sandboxes]
 
     def cleanup_expired(self):

@@ -90,12 +90,24 @@ const LAYER_ATTACKS = {
 };
 
 /* ── MOCK DATA ── */
-const MOCK_ENGAGEMENT = {
-  id: 1, name: "FinCorp Fraud Model", target_type: "api_endpoint",
-  target_config: { url: "https://api.fincorp.internal/v2/fraud/predict", auth: "Bearer ••••••" },
-  scope: ["training","inference","artifacts","infra","output"],
-  status: "active", risk_score: 38,
-};
+const MOCK_ENGAGEMENTS = [
+  { id: 1, name: "FinCorp Fraud Model", target_type: "api_endpoint",
+    target_config: { url: "https://api.fincorp.internal/v2/fraud/predict", auth: "Bearer ••••••" },
+    scope: ["training","inference","artifacts","infra","output"],
+    status: "active", risk_score: 38 },
+  { id: 2, name: "MedScan ResNet50", target_type: "model_upload",
+    target_config: { framework: "pytorch", filename: "resnet50_medical.pt" },
+    scope: ["training","inference","artifacts","pipeline"],
+    status: "active", risk_score: 52 },
+  { id: 3, name: "ChatBot v2 (GPT-4o)", target_type: "llm_endpoint",
+    target_config: { provider: "OpenAI", model: "gpt-4o" },
+    scope: ["output","infra"],
+    status: "active", risk_score: 15 },
+  { id: 4, name: "Credit Scoring XGB", target_type: "model_upload",
+    target_config: { framework: "sklearn", filename: "credit_xgb.pkl" },
+    scope: ["training","inference","pipeline"],
+    status: "completed", risk_score: 8 },
+];
 const MOCK_SANDBOX = {
   id: 1, engagement_id: 2, status: "running", framework: "pytorch",
   filename: "resnet50_medical.pt", port: 5001, gpu: true, uptime: "2h 14m",
@@ -112,9 +124,10 @@ const MOCK_FINDINGS = [
 /* ═══════════════════════════════════
    SIDEBAR
    ═══════════════════════════════════ */
-function Sidebar({ page, setPage, engagement }) {
+function Sidebar({ page, setPage, engagement, engagements, onSelectEngagement, onNewEngagement }) {
   const layers = Object.entries(LAYER_META);
   const findingsCount = MOCK_FINDINGS.filter(f => f.status === "open").length;
+  const [engOpen, setEngOpen] = useState(false);
 
   const Section = ({ label, children }) => (
     <div className="mb-1">
@@ -139,10 +152,36 @@ function Sidebar({ page, setPage, engagement }) {
           <div className="w-8 h-8 rounded-md bg-gradient-to-br from-emerald-600 to-emerald-400 flex items-center justify-center font-mono text-[10px] font-bold text-white">B</div>
           <div><div className="text-[12px] font-semibold text-white">BBAP-Sec</div><div className="text-[8px] text-white/25 uppercase tracking-[0.2em]">AI Pentest Platform</div></div>
         </div>
+
+        {/* Engagement selector */}
         <div className="text-[8px] text-white/20 uppercase tracking-widest mb-1">Engagement</div>
-        <div className={`px-2.5 py-1.5 rounded-md ${G} text-[10px] font-mono text-emerald-400/80`}>
-          {engagement.name}
+        <div className="relative">
+          <button onClick={() => setEngOpen(!engOpen)} className={`w-full px-2.5 py-1.5 rounded-md ${G} text-left flex items-center justify-between hover:border-white/[0.15] transition-colors`}>
+            <span className="text-[10px] font-mono text-emerald-400/80 truncate">{engagement.name}</span>
+            <ChevronDown size={11} className={`text-white/20 transition-transform ${engOpen ? "rotate-180" : ""}`} />
+          </button>
+
+          {engOpen && (
+            <div className={`absolute left-0 right-0 top-full mt-1 rounded-md ${GS} shadow-xl z-50 overflow-hidden`}>
+              {engagements.map(e => (
+                <button key={e.id} onClick={() => { onSelectEngagement(e.id); setEngOpen(false); }}
+                  className={`w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-white/[0.04] transition-colors ${e.id === engagement.id ? "bg-emerald-500/[0.06]" : ""}`}>
+                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${e.status === "active" ? "bg-emerald-400" : "bg-white/20"}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className={`text-[10px] truncate ${e.id === engagement.id ? "text-emerald-400" : "text-white/60"}`}>{e.name}</div>
+                    <div className="text-[8px] text-white/20">{e.target_type.replace("_"," ")}</div>
+                  </div>
+                </button>
+              ))}
+              <button onClick={() => { onNewEngagement(); setEngOpen(false); }}
+                className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-white/[0.04] border-t border-white/[0.06]">
+                <Plus size={11} className="text-emerald-400/60" />
+                <span className="text-[10px] text-emerald-400/60">New Engagement</span>
+              </button>
+            </div>
+          )}
         </div>
+
         <div className="flex items-center gap-1.5 mt-1.5">
           <div className={`w-1.5 h-1.5 rounded-full ${engagement.status === "active" ? "bg-emerald-400" : "bg-white/20"}`} />
           <span className="text-[9px] text-white/25">{engagement.target_type.replace("_"," ")}</span>
@@ -280,15 +319,82 @@ function OverviewPage({ engagement }) {
 /* ═══════════════════════════════════
    TARGET SETUP PAGE
    ═══════════════════════════════════ */
-function TargetPage() {
-  const [method, setMethod] = useState("api_endpoint");
+function TargetPage({ engagement }) {
+  const [method, setMethod] = useState(engagement.target_type || "api_endpoint");
+  const [file, setFile] = useState(null);
+  const [framework, setFramework] = useState("pytorch");
+  const [url, setUrl] = useState(engagement.target_config?.url || "");
+  const [authHeaders, setAuthHeaders] = useState(engagement.target_config?.auth || "");
+  const [inputShape, setInputShape] = useState("");
+  const [provider, setProvider] = useState("Anthropic (Claude)");
+  const [apiKey, setApiKey] = useState("");
+  const [modelName, setModelName] = useState("");
+  const [registryUrl, setRegistryUrl] = useState("");
+  const [registryModelId, setRegistryModelId] = useState("");
+  const [registryCreds, setRegistryCreds] = useState("");
+  const [sandbox, setSandbox] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [testResult, setTestResult] = useState(null);
+  const fileInputRef = useState(null);
+
   const methods = [
-    { id: "api_endpoint", label: "API Endpoint", icon: Globe, desc: "Test a deployed model via its REST API", fields: ["URL","Auth headers","Response format"] },
-    { id: "model_upload", label: "Model Upload", icon: Upload, desc: "Upload .pt/.onnx/.h5 into isolated sandbox", fields: ["Model file","Framework","Input shape"], sandbox: true },
-    { id: "registry",     label: "Registry",     icon: Database, desc: "Pull from MLflow, HuggingFace, S3", fields: ["Registry URL","Model ID","Credentials"], sandbox: true },
-    { id: "llm_endpoint", label: "LLM Endpoint", icon: MessageSquare, desc: "Test LLM apps via API (OpenAI, Anthropic)", fields: ["Provider","API key","Model name"] },
+    { id: "api_endpoint", label: "API Endpoint", icon: Globe, desc: "Test a deployed model via its REST API", sandbox: false },
+    { id: "model_upload", label: "Model Upload", icon: Upload, desc: "Upload .pt/.onnx/.h5 into isolated sandbox", sandbox: true },
+    { id: "registry",     label: "Registry",     icon: Database, desc: "Pull from MLflow, HuggingFace, S3", sandbox: true },
+    { id: "llm_endpoint", label: "LLM Endpoint", icon: MessageSquare, desc: "Test LLM apps via API (OpenAI, Anthropic)", sandbox: false },
   ];
   const sel = methods.find(m => m.id === method);
+
+  const handleFileSelect = (e) => {
+    const f = e.target.files?.[0];
+    if (f) { setFile(f); setError(null); }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    const f = e.dataTransfer.files?.[0];
+    if (f) { setFile(f); setError(null); }
+  };
+
+  const handleCreateSandbox = async () => {
+    if (!file) { setError("Select a model file first"); return; }
+    setLoading(true); setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("engagement_id", engagement.id);
+      formData.append("framework", framework);
+      formData.append("gpu", "false");
+      const resp = await fetch("/api/v2/sandbox/create", { method: "POST", body: formData });
+      const data = await resp.json();
+      if (resp.ok) { setSandbox(data); } else { setError(data.error || "Sandbox creation failed"); }
+    } catch (e) { setError(`Connection failed: ${e.message}`); }
+    setLoading(false);
+  };
+
+  const handleDestroySandbox = async () => {
+    if (!sandbox) return;
+    try {
+      await fetch(`/api/v2/sandbox/${sandbox.id}`, { method: "DELETE" });
+      setSandbox(null); setFile(null);
+    } catch (e) { setError(`Destroy failed: ${e.message}`); }
+  };
+
+  const handleTestConnection = async () => {
+    setLoading(true); setError(null); setTestResult(null);
+    try {
+      const resp = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...(authHeaders ? { Authorization: authHeaders } : {}) }, body: JSON.stringify({ input: [[0]] }) });
+      setTestResult({ ok: resp.ok, status: resp.status, time: "—" });
+    } catch (e) { setTestResult({ ok: false, status: 0, error: e.message }); }
+    setLoading(false);
+  };
+
+  const formatSize = (bytes) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1048576).toFixed(1)} MB`;
+  };
 
   return (
     <div className="space-y-5">
@@ -300,7 +406,7 @@ function TargetPage() {
       {/* Method selector */}
       <div className="grid grid-cols-4 gap-3">
         {methods.map(m => (
-          <button key={m.id} onClick={() => setMethod(m.id)} className={`${G} rounded-lg p-4 text-left transition-all ${method === m.id ? "border-emerald-500/30 bg-emerald-500/[0.04]" : "hover:border-white/[0.12]"}`}>
+          <button key={m.id} onClick={() => { setMethod(m.id); setError(null); setTestResult(null); }} className={`${G} rounded-lg p-4 text-left transition-all ${method === m.id ? "border-emerald-500/30 bg-emerald-500/[0.04]" : "hover:border-white/[0.12]"}`}>
             <m.icon size={18} className={method === m.id ? "text-emerald-400" : "text-white/30"} />
             <div className={`text-[12px] font-medium mt-2 ${method === m.id ? "text-emerald-400" : "text-white/70"}`}>{m.label}</div>
             <div className="text-[10px] text-white/30 mt-1">{m.desc}</div>
@@ -309,53 +415,139 @@ function TargetPage() {
         ))}
       </div>
 
-      {/* Config form */}
-      <div className={`${G} rounded-lg p-5`}>
-        <h3 className="text-sm font-medium text-emerald-400 mb-4">{sel.label} — Configuration</h3>
-        <div className="grid grid-cols-2 gap-4">
-          {sel.fields.map(f => (
-            <div key={f}>
-              <label className="text-[10px] text-white/35 block mb-1">{f}</label>
-              {f === "Model file" ? (
-                <div className="flex items-center gap-2 px-3 py-3 rounded-md bg-black/30 border border-dashed border-white/[0.1] cursor-pointer hover:border-emerald-500/30 transition-colors">
-                  <Upload size={14} className="text-white/25" />
-                  <span className="text-[11px] text-white/30">Drop file or click to browse</span>
-                </div>
-              ) : f === "Framework" ? (
-                <select className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] focus:outline-none focus:border-emerald-500/30">
-                  <option>PyTorch (.pt, .pth)</option><option>ONNX (.onnx)</option><option>TensorFlow (.h5, .pb)</option><option>scikit-learn (.pkl)</option><option>SafeTensors (.safetensors)</option>
-                </select>
-              ) : f === "Provider" ? (
-                <select className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] focus:outline-none focus:border-emerald-500/30">
-                  <option>Anthropic (Claude)</option><option>OpenAI (GPT)</option><option>Azure OpenAI</option><option>Self-hosted (Ollama, vLLM)</option><option>Custom endpoint</option>
-                </select>
-              ) : (
-                <input className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] font-mono focus:outline-none focus:border-emerald-500/30" placeholder={f === "URL" ? "https://api.target.com/v2/predict" : f === "API key" ? "sk-••••••••••••" : ""} />
-              )}
-            </div>
-          ))}
+      {/* ── API Endpoint config ── */}
+      {method === "api_endpoint" && (
+        <div className={`${G} rounded-lg p-5`}>
+          <h3 className="text-sm font-medium text-emerald-400 mb-4">API Endpoint — Configuration</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="text-[10px] text-white/35 block mb-1">URL</label>
+              <input value={url} onChange={e => setUrl(e.target.value)} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] font-mono focus:outline-none focus:border-emerald-500/30" placeholder="https://api.target.com/v2/predict" /></div>
+            <div><label className="text-[10px] text-white/35 block mb-1">Authorization header</label>
+              <input value={authHeaders} onChange={e => setAuthHeaders(e.target.value)} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] font-mono focus:outline-none focus:border-emerald-500/30" placeholder="Bearer sk-..." /></div>
+            <div><label className="text-[10px] text-white/35 block mb-1">Response format</label>
+              <input className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] font-mono focus:outline-none focus:border-emerald-500/30" placeholder="JSON (auto-detect)" /></div>
+          </div>
+          <div className="flex items-center gap-3 mt-5">
+            <button onClick={handleTestConnection} disabled={!url || loading} className="px-5 py-2 rounded-md bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2">
+              {loading ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}Test Connection
+            </button>
+            {testResult && (
+              <span className={`text-[10px] font-mono px-2 py-1 rounded ${testResult.ok ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"}`}>
+                {testResult.ok ? `✓ Connected (${testResult.status})` : `✗ Failed: ${testResult.error || testResult.status}`}
+              </span>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-3 mt-5">
-          <button className="px-5 py-2 rounded-md bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-500 flex items-center gap-2">
-            {sel.sandbox ? <><Box size={13} />Create Sandbox &amp; Connect</> : <><Zap size={13} />Test Connection</>}
-          </button>
-          <span className="text-[10px] text-white/20">Validates endpoint is reachable before saving</span>
-        </div>
-      </div>
+      )}
 
-      {/* Sandbox status (if applicable) */}
-      {sel.sandbox && (
+      {/* ── Model Upload config ── */}
+      {method === "model_upload" && (
+        <div className={`${G} rounded-lg p-5`}>
+          <h3 className="text-sm font-medium text-emerald-400 mb-4">Model Upload — Configuration</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-[10px] text-white/35 block mb-1">Model file</label>
+              <input type="file" accept=".pt,.pth,.onnx,.h5,.keras,.pb,.pkl,.joblib,.safetensors" onChange={handleFileSelect} className="hidden" id="model-file-input" />
+              <label htmlFor="model-file-input"
+                onDrop={handleDrop} onDragOver={e => e.preventDefault()}
+                className={`flex items-center gap-3 px-3 py-3 rounded-md border border-dashed cursor-pointer transition-colors ${file ? "bg-emerald-500/[0.04] border-emerald-500/30" : "bg-black/30 border-white/[0.1] hover:border-emerald-500/30"}`}>
+                {file ? (
+                  <>
+                    <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[11px] text-emerald-400 truncate">{file.name}</div>
+                      <div className="text-[9px] text-white/25">{formatSize(file.size)}</div>
+                    </div>
+                    <button onClick={(e) => { e.preventDefault(); setFile(null); }} className="text-white/20 hover:text-white/50"><XCircle size={14} /></button>
+                  </>
+                ) : (
+                  <>
+                    <Upload size={14} className="text-white/25" />
+                    <span className="text-[11px] text-white/30">Drop file or click to browse</span>
+                  </>
+                )}
+              </label>
+            </div>
+            <div><label className="text-[10px] text-white/35 block mb-1">Framework</label>
+              <select value={framework} onChange={e => setFramework(e.target.value)} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] focus:outline-none focus:border-emerald-500/30">
+                <option value="pytorch">PyTorch (.pt, .pth)</option><option value="onnx">ONNX (.onnx)</option><option value="tensorflow">TensorFlow (.h5, .pb)</option><option value="sklearn">scikit-learn (.pkl)</option><option value="safetensors">SafeTensors (.safetensors)</option>
+              </select></div>
+            <div><label className="text-[10px] text-white/35 block mb-1">Input shape (optional)</label>
+              <input value={inputShape} onChange={e => setInputShape(e.target.value)} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] font-mono focus:outline-none focus:border-emerald-500/30" placeholder="e.g. 1,28,28 or 3,224,224" /></div>
+          </div>
+          <div className="flex items-center gap-3 mt-5">
+            <button onClick={handleCreateSandbox} disabled={!file || loading} className="px-5 py-2 rounded-md bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2">
+              {loading ? <Loader2 size={13} className="animate-spin" /> : <Box size={13} />}
+              {loading ? "Creating sandbox..." : "Create Sandbox & Connect"}
+            </button>
+            <span className="text-[10px] text-white/20">Uploads model into isolated Docker container</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Registry config ── */}
+      {method === "registry" && (
+        <div className={`${G} rounded-lg p-5`}>
+          <h3 className="text-sm font-medium text-emerald-400 mb-4">Registry — Configuration</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="text-[10px] text-white/35 block mb-1">Registry URL</label>
+              <input value={registryUrl} onChange={e => setRegistryUrl(e.target.value)} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] font-mono focus:outline-none focus:border-emerald-500/30" placeholder="https://mlflow.internal:5000 or huggingface.co" /></div>
+            <div><label className="text-[10px] text-white/35 block mb-1">Model ID</label>
+              <input value={registryModelId} onChange={e => setRegistryModelId(e.target.value)} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] font-mono focus:outline-none focus:border-emerald-500/30" placeholder="models:/fraud-detector/production" /></div>
+            <div><label className="text-[10px] text-white/35 block mb-1">Credentials</label>
+              <input type="password" value={registryCreds} onChange={e => setRegistryCreds(e.target.value)} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] font-mono focus:outline-none focus:border-emerald-500/30" placeholder="Token or API key" /></div>
+          </div>
+          <div className="flex items-center gap-3 mt-5">
+            <button disabled={!registryUrl || !registryModelId} className="px-5 py-2 rounded-md bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2"><Box size={13} />Pull & Create Sandbox</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── LLM Endpoint config ── */}
+      {method === "llm_endpoint" && (
+        <div className={`${G} rounded-lg p-5`}>
+          <h3 className="text-sm font-medium text-emerald-400 mb-4">LLM Endpoint — Configuration</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="text-[10px] text-white/35 block mb-1">Provider</label>
+              <select value={provider} onChange={e => setProvider(e.target.value)} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] focus:outline-none focus:border-emerald-500/30">
+                <option>Anthropic (Claude)</option><option>OpenAI (GPT)</option><option>Azure OpenAI</option><option>Self-hosted (Ollama, vLLM)</option><option>Custom endpoint</option>
+              </select></div>
+            <div><label className="text-[10px] text-white/35 block mb-1">API key</label>
+              <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] font-mono focus:outline-none focus:border-emerald-500/30" placeholder="sk-..." /></div>
+            <div><label className="text-[10px] text-white/35 block mb-1">Model name</label>
+              <input value={modelName} onChange={e => setModelName(e.target.value)} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] font-mono focus:outline-none focus:border-emerald-500/30" placeholder="claude-sonnet-4-20250514 or gpt-4o" /></div>
+          </div>
+          <div className="flex items-center gap-3 mt-5">
+            <button disabled={!apiKey} className="px-5 py-2 rounded-md bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2"><Zap size={13} />Test Connection</button>
+          </div>
+        </div>
+      )}
+
+      {/* Error display */}
+      {error && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-md bg-red-500/10 border border-red-500/20">
+          <AlertTriangle size={14} className="text-red-400 shrink-0" />
+          <span className="text-[11px] text-red-400">{error}</span>
+          <button onClick={() => setError(null)} className="ml-auto text-red-400/50 hover:text-red-400"><XCircle size={14} /></button>
+        </div>
+      )}
+
+      {/* Active sandbox status */}
+      {sandbox && sandbox.status === "running" && (
         <div className={`${G} rounded-lg p-5`}>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-medium text-violet-400 flex items-center gap-2"><Server size={14} />Active Sandbox</h3>
-            <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">running</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{sandbox.status}</span>
+              <button onClick={handleDestroySandbox} className="text-[9px] text-red-400/50 hover:text-red-400 px-2 py-0.5 rounded hover:bg-red-500/10">Destroy</button>
+            </div>
           </div>
           <div className="grid grid-cols-4 gap-4">
             {[
-              { l: "Container", v: MOCK_SANDBOX.container_id || "bbap-sbx-001" },
-              { l: "Framework", v: MOCK_SANDBOX.framework },
-              { l: "Port", v: `:${MOCK_SANDBOX.port}` },
-              { l: "GPU", v: MOCK_SANDBOX.gpu ? "Enabled" : "CPU only" },
+              { l: "Container", v: sandbox.container_id || `bbap-sbx-${String(sandbox.id).padStart(3,"0")}` },
+              { l: "Framework", v: sandbox.framework },
+              { l: "Port", v: `:${sandbox.port}` },
+              { l: "Mode", v: sandbox.mode || "docker" },
             ].map(x => (
               <div key={x.l}>
                 <div className="text-[9px] text-white/25 uppercase tracking-wider">{x.l}</div>
@@ -365,8 +557,31 @@ function TargetPage() {
           </div>
           <div className="mt-3 flex items-center gap-2 text-[10px] text-white/20">
             <Radio size={10} className="text-emerald-400 animate-pulse" />
-            <span>Uptime: {MOCK_SANDBOX.uptime} — Network isolated — {MOCK_SANDBOX.filename}</span>
+            <span>Network isolated — {sandbox.model_filename} ({formatSize(sandbox.model_size_bytes)})</span>
           </div>
+          {sandbox.api_url && (
+            <div className="mt-2 text-[10px] font-mono text-emerald-400/40">API: {sandbox.api_url}</div>
+          )}
+        </div>
+      )}
+
+      {/* Sandbox creation in progress */}
+      {sandbox && sandbox.status === "starting" && (
+        <div className={`${G} rounded-lg p-5 text-center`}>
+          <Loader2 size={20} className="text-emerald-400 animate-spin mx-auto mb-2" />
+          <div className="text-[11px] text-white/40">Creating sandbox container...</div>
+        </div>
+      )}
+
+      {/* Sandbox failed */}
+      {sandbox && sandbox.status === "failed" && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-md bg-red-500/10 border border-red-500/20">
+          <XCircle size={14} className="text-red-400 shrink-0" />
+          <div className="flex-1">
+            <div className="text-[11px] text-red-400">Sandbox creation failed</div>
+            {sandbox.error && <div className="text-[10px] text-red-400/50 mt-0.5 font-mono">{sandbox.error}</div>}
+          </div>
+          <button onClick={() => setSandbox(null)} className="text-[10px] text-white/30 hover:text-white/50">Dismiss</button>
         </div>
       )}
 
@@ -399,7 +614,7 @@ function TargetPage() {
 /* ═══════════════════════════════════
    ATTACK LAYER PAGE (reusable)
    ═══════════════════════════════════ */
-function LayerPage({ layerKey }) {
+function LayerPage({ layerKey, engagement }) {
   const meta = LAYER_META[layerKey];
   const attacks = LAYER_ATTACKS[layerKey] || [];
   const findings = MOCK_FINDINGS.filter(f => f.layer === layerKey);
@@ -446,7 +661,7 @@ function LayerPage({ layerKey }) {
         <div className={`${G} rounded-lg p-5`}>
           <h3 className="text-sm font-medium mb-3" style={{ color: meta.color }}>Run: {sel.name}</h3>
           <div className="grid grid-cols-3 gap-4 mb-4">
-            <div><label className="text-[10px] text-white/35 block mb-1">Target</label><div className="px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-[11px] text-white/40 font-mono">{MOCK_ENGAGEMENT.name}</div></div>
+            <div><label className="text-[10px] text-white/35 block mb-1">Target</label><div className="px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-[11px] text-white/40 font-mono">{engagement.name}</div></div>
             {layerKey === "inference" && sel.id.startsWith("fgsm") && (
               <div><label className="text-[10px] text-white/35 block mb-1">Epsilon (ε)</label><input type="number" defaultValue={0.03} step={0.01} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] font-mono focus:outline-none focus:border-emerald-500/30" /></div>
             )}
@@ -576,7 +791,7 @@ function FindingsPage() {
 /* ═══════════════════════════════════
    REPORT GENERATOR PAGE
    ═══════════════════════════════════ */
-function ReportPage() {
+function ReportPage({ engagement }) {
   const sections = [
     { name: "Executive Summary", desc: "Risk score, key findings, target overview", auto: true },
     { name: "Training Phase", desc: `${MOCK_FINDINGS.filter(f=>f.layer==="training").length} findings`, auto: true },
@@ -621,11 +836,11 @@ function ReportPage() {
       <div className={`${G} rounded-lg p-5`}>
         <div className="text-[10px] text-white/25 uppercase tracking-widest mb-3">Report preview</div>
         <div className="font-mono text-[11px] text-white/40 space-y-1">
-          <div>Engagement: <span className="text-emerald-400">{MOCK_ENGAGEMENT.name}</span></div>
-          <div>Target: <span className="text-white/60">{MOCK_ENGAGEMENT.target_type.replace("_"," ")}</span></div>
+          <div>Engagement: <span className="text-emerald-400">{engagement.name}</span></div>
+          <div>Target: <span className="text-white/60">{engagement.target_type.replace("_"," ")}</span></div>
           <div>Findings: <span className="text-orange-400">{MOCK_FINDINGS.length}</span> ({MOCK_FINDINGS.filter(f=>f.severity==="critical").length} critical, {MOCK_FINDINGS.filter(f=>f.severity==="high").length} high)</div>
           <div>Layers tested: <span className="text-white/60">{new Set(MOCK_FINDINGS.map(f=>f.layer)).size}/6</span></div>
-          <div>Risk score: <span className="text-amber-400">{MOCK_ENGAGEMENT.risk_score}/100 (medium)</span></div>
+          <div>Risk score: <span className="text-amber-400">{engagement.risk_score}/100 (medium)</span></div>
           <div>Cross-layer connections: <span className="text-violet-400">{MOCK_FINDINGS.reduce((s,f) => s + f.related.length, 0)}</span></div>
         </div>
       </div>
@@ -1028,14 +1243,33 @@ function PlaceholderPage({ title, desc }) {
    ═══════════════════════════════════ */
 export default function App() {
   const [page, setPage] = useState("overview");
-  const engagement = MOCK_ENGAGEMENT;
+  const [engagements, setEngagements] = useState(MOCK_ENGAGEMENTS);
+  const [engagementId, setEngagementId] = useState(MOCK_ENGAGEMENTS[0].id);
+  const engagement = engagements.find(e => e.id === engagementId) || engagements[0];
+
+  const handleNewEngagement = () => {
+    const name = prompt("Engagement name:");
+    if (!name) return;
+    const newEng = {
+      id: Math.max(...engagements.map(e => e.id)) + 1,
+      name,
+      target_type: "api_endpoint",
+      target_config: {},
+      scope: [],
+      status: "active",
+      risk_score: 0,
+    };
+    setEngagements([...engagements, newEng]);
+    setEngagementId(newEng.id);
+    setPage("target");
+  };
 
   const getContent = () => {
     if (page === "overview") return <OverviewPage engagement={engagement} />;
-    if (page === "target") return <TargetPage />;
-    if (page.startsWith("layer_")) return <LayerPage layerKey={page.replace("layer_", "")} />;
+    if (page === "target") return <TargetPage engagement={engagement} />;
+    if (page.startsWith("layer_")) return <LayerPage layerKey={page.replace("layer_", "")} engagement={engagement} />;
     if (page === "findings") return <FindingsPage />;
-    if (page === "report") return <ReportPage />;
+    if (page === "report") return <ReportPage engagement={engagement} />;
     if (page === "governance") return <GovernancePage engagement={engagement} />;
     if (page === "monitoring") return <MonitoringPage />;
     if (page === "pipeline_checks") return <PlaceholderPage title="Secure Pipeline" desc="46 security controls across 5 stages" />;
@@ -1050,7 +1284,8 @@ export default function App() {
   return (
     <div className="flex h-screen bg-[#080b12] text-white overflow-hidden" style={{ fontFamily: "'DM Sans',system-ui,sans-serif" }}>
       <div className="fixed inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse 60% 40% at 20% 10%,rgba(46,204,113,0.03),transparent),radial-gradient(ellipse 50% 50% at 80% 80%,rgba(184,115,51,0.02),transparent)" }} />
-      <Sidebar page={page} setPage={setPage} engagement={engagement} />
+      <Sidebar page={page} setPage={setPage} engagement={engagement}
+        engagements={engagements} onSelectEngagement={setEngagementId} onNewEngagement={handleNewEngagement} />
       <main className="flex-1 overflow-y-auto relative z-10 p-6 pb-20">{getContent()}</main>
     </div>
   );
