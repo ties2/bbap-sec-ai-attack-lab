@@ -90,7 +90,7 @@ const LAYER_ATTACKS = {
 };
 
 /* ── MOCK DATA ── */
-const MOCK_ENGAGEMENTS = [
+const MOCK_PROJECTS = [
   { id: 1, name: "FinCorp Fraud Model", target_type: "api_endpoint",
     target_config: { url: "https://api.fincorp.internal/v2/fraud/predict", auth: "Bearer ••••••" },
     scope: ["training","inference","artifacts","infra","output"],
@@ -109,24 +109,26 @@ const MOCK_ENGAGEMENTS = [
     status: "completed", risk_score: 8 },
 ];
 const MOCK_SANDBOX = {
-  id: 1, engagement_id: 2, status: "running", framework: "pytorch",
+  id: 1, project_id: 2, status: "running", framework: "pytorch",
   filename: "resnet50_medical.pt", port: 5001, gpu: true, uptime: "2h 14m",
 };
 const MOCK_FINDINGS = [
-  { id: "F-001", layer: "inference", attack: "fgsm", severity: "high", title: "FGSM drops accuracy 56% at ε=0.03", metrics: { accuracy_drop: 56.4, asr: 57.9 }, atlas: "AML.T0043.001", related: ["F-003"], status: "open" },
-  { id: "F-002", layer: "output", attack: "inject_direct", severity: "critical", title: "Direct injection bypasses system prompt", metrics: { asr: 40, defended: 6, injected: 4 }, atlas: "AML.T0051.000", related: ["F-004"], status: "open" },
-  { id: "F-003", layer: "infra", attack: "rate_limit", severity: "medium", title: "No rate limiting on /predict endpoint", metrics: { queries_before_block: "unlimited" }, atlas: "AML.T0005", related: ["F-001"], status: "in_progress" },
-  { id: "F-004", layer: "output", attack: "prompt_leak", severity: "high", title: "System prompt leaked via fictional framing", metrics: { leaked_secrets: 2 }, atlas: "AML.T0053", related: ["F-002"], status: "open" },
-  { id: "F-005", layer: "artifacts", attack: "extract_random", severity: "high", title: "Model cloned with 91% fidelity in 1000 queries", metrics: { fidelity: 91.4, queries: 1000 }, atlas: "AML.T0044", related: ["F-003"], status: "open" },
-  { id: "F-006", layer: "training", attack: "poison_backdoor", severity: "critical", title: "Backdoor trigger achieves 94% ASR", metrics: { backdoor_asr: 94.2, poison_rate: 0.1 }, atlas: "AML.T0020.001", related: [], status: "open" },
+  { id: "F-001", project_id: 1, layer: "inference", attack: "fgsm", severity: "high", title: "FGSM drops accuracy 56% at ε=0.03", metrics: { accuracy_drop: 56.4, asr: 57.9 }, atlas: "AML.T0043.001", related: ["F-003"], status: "open" },
+  { id: "F-002", project_id: 1, layer: "output", attack: "inject_direct", severity: "critical", title: "Direct injection bypasses system prompt", metrics: { asr: 40, defended: 6, injected: 4 }, atlas: "AML.T0051.000", related: ["F-004"], status: "open" },
+  { id: "F-003", project_id: 1, layer: "infra", attack: "rate_limit", severity: "medium", title: "No rate limiting on /predict endpoint", metrics: { queries_before_block: "unlimited" }, atlas: "AML.T0005", related: ["F-001"], status: "in_progress" },
+  { id: "F-004", project_id: 1, layer: "output", attack: "prompt_leak", severity: "high", title: "System prompt leaked via fictional framing", metrics: { leaked_secrets: 2 }, atlas: "AML.T0053", related: ["F-002"], status: "open" },
+  { id: "F-005", project_id: 1, layer: "artifacts", attack: "extract_random", severity: "high", title: "Model cloned with 91% fidelity in 1000 queries", metrics: { fidelity: 91.4, queries: 1000 }, atlas: "AML.T0044", related: ["F-003"], status: "open" },
+  { id: "F-006", project_id: 2, layer: "training", attack: "poison_backdoor", severity: "critical", title: "Backdoor trigger achieves 94% ASR", metrics: { backdoor_asr: 94.2, poison_rate: 0.1 }, atlas: "AML.T0020.001", related: [], status: "open" },
+  { id: "F-007", project_id: 2, layer: "inference", attack: "pgd", severity: "high", title: "PGD drops accuracy 72% at ε=0.05", metrics: { accuracy_drop: 72.1, asr: 73.5 }, atlas: "AML.T0043.001", related: [], status: "open" },
+  { id: "F-008", project_id: 3, layer: "output", attack: "jailbreak", severity: "medium", title: "Fictional framing bypasses safety filter", metrics: { asr: 20, defended: 8, injected: 2 }, atlas: "AML.T0054", related: [], status: "open" },
 ];
 
 /* ═══════════════════════════════════
    SIDEBAR
    ═══════════════════════════════════ */
-function Sidebar({ page, setPage, engagement, engagements, onSelectEngagement, onNewEngagement }) {
+function Sidebar({ page, setPage, project, projects, onSelectProject, onNewProject }) {
   const layers = Object.entries(LAYER_META);
-  const findingsCount = MOCK_FINDINGS.filter(f => f.status === "open").length;
+  const findingsCount = MOCK_FINDINGS.filter(f => f.project_id === project.id && f.status === "open").length;
   const [engOpen, setEngOpen] = useState(false);
 
   const Section = ({ label, children }) => (
@@ -149,42 +151,42 @@ function Sidebar({ page, setPage, engagement, engagements, onSelectEngagement, o
       {/* Brand */}
       <div className="p-3.5 border-b border-white/[0.06]">
         <div className="flex items-center gap-2.5 mb-3">
-          <div className="w-8 h-8 rounded-md bg-gradient-to-br from-emerald-600 to-emerald-400 flex items-center justify-center font-mono text-[10px] font-bold text-white">B</div>
+          <img src="/logo.png" alt="BBAP-Sec" className="w-8 h-8 rounded-md object-contain" />
           <div><div className="text-[12px] font-semibold text-white">BBAP-Sec</div><div className="text-[8px] text-white/25 uppercase tracking-[0.2em]">AI Pentest Platform</div></div>
         </div>
 
-        {/* Engagement selector */}
-        <div className="text-[8px] text-white/20 uppercase tracking-widest mb-1">Engagement</div>
+        {/* Project selector */}
+        <div className="text-[8px] text-white/20 uppercase tracking-widest mb-1">Project</div>
         <div className="relative">
           <button onClick={() => setEngOpen(!engOpen)} className={`w-full px-2.5 py-1.5 rounded-md ${G} text-left flex items-center justify-between hover:border-white/[0.15] transition-colors`}>
-            <span className="text-[10px] font-mono text-emerald-400/80 truncate">{engagement.name}</span>
+            <span className="text-[10px] font-mono text-emerald-400/80 truncate">{project.name}</span>
             <ChevronDown size={11} className={`text-white/20 transition-transform ${engOpen ? "rotate-180" : ""}`} />
           </button>
 
           {engOpen && (
             <div className={`absolute left-0 right-0 top-full mt-1 rounded-md ${GS} shadow-xl z-50 overflow-hidden`}>
-              {engagements.map(e => (
-                <button key={e.id} onClick={() => { onSelectEngagement(e.id); setEngOpen(false); }}
-                  className={`w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-white/[0.04] transition-colors ${e.id === engagement.id ? "bg-emerald-500/[0.06]" : ""}`}>
+              {projects.map(e => (
+                <button key={e.id} onClick={() => { onSelectProject(e.id); setEngOpen(false); }}
+                  className={`w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-white/[0.04] transition-colors ${e.id === project.id ? "bg-emerald-500/[0.06]" : ""}`}>
                   <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${e.status === "active" ? "bg-emerald-400" : "bg-white/20"}`} />
                   <div className="flex-1 min-w-0">
-                    <div className={`text-[10px] truncate ${e.id === engagement.id ? "text-emerald-400" : "text-white/60"}`}>{e.name}</div>
+                    <div className={`text-[10px] truncate ${e.id === project.id ? "text-emerald-400" : "text-white/60"}`}>{e.name}</div>
                     <div className="text-[8px] text-white/20">{e.target_type.replace("_"," ")}</div>
                   </div>
                 </button>
               ))}
-              <button onClick={() => { onNewEngagement(); setEngOpen(false); }}
+              <button onClick={() => { onNewProject(); setEngOpen(false); }}
                 className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-white/[0.04] border-t border-white/[0.06]">
                 <Plus size={11} className="text-emerald-400/60" />
-                <span className="text-[10px] text-emerald-400/60">New Engagement</span>
+                <span className="text-[10px] text-emerald-400/60">New Project</span>
               </button>
             </div>
           )}
         </div>
 
         <div className="flex items-center gap-1.5 mt-1.5">
-          <div className={`w-1.5 h-1.5 rounded-full ${engagement.status === "active" ? "bg-emerald-400" : "bg-white/20"}`} />
-          <span className="text-[9px] text-white/25">{engagement.target_type.replace("_"," ")}</span>
+          <div className={`w-1.5 h-1.5 rounded-full ${project.status === "active" ? "bg-emerald-400" : "bg-white/20"}`} />
+          <span className="text-[9px] text-white/25">{project.target_type.replace("_"," ")}</span>
         </div>
       </div>
 
@@ -225,30 +227,31 @@ function Sidebar({ page, setPage, engagement, engagements, onSelectEngagement, o
 /* ═══════════════════════════════════
    OVERVIEW PAGE
    ═══════════════════════════════════ */
-function OverviewPage({ engagement }) {
+function OverviewPage({ project }) {
   const layers = Object.entries(LAYER_META);
+  const engFindings = MOCK_FINDINGS.filter(f => f.project_id === project.id);
   const findingsByLayer = {};
-  MOCK_FINDINGS.forEach(f => {
+  engFindings.forEach(f => {
     findingsByLayer[f.layer] = (findingsByLayer[f.layer] || 0) + 1;
   });
-  const critCount = MOCK_FINDINGS.filter(f => f.severity === "critical").length;
-  const highCount = MOCK_FINDINGS.filter(f => f.severity === "high").length;
+  const critCount = engFindings.filter(f => f.severity === "critical").length;
+  const highCount = engFindings.filter(f => f.severity === "high").length;
 
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold text-white mb-0.5">Engagement Overview</h1>
-        <p className="text-sm text-white/35">{engagement.name} — {engagement.target_type.replace("_"," ")}</p>
+        <h1 className="text-xl font-semibold text-white mb-0.5">Project Overview</h1>
+        <p className="text-sm text-white/35">{project.name} — {project.target_type.replace("_"," ")}</p>
       </div>
 
       {/* Top stats */}
       <div className="grid grid-cols-5 gap-3">
         {[
-          { l: "Risk Score", v: engagement.risk_score + "/100", c: "text-amber-400", bg: "bg-amber-500/10", I: ShieldAlert },
-          { l: "Findings", v: MOCK_FINDINGS.length, c: "text-orange-400", bg: "bg-orange-500/10", I: Bug },
+          { l: "Risk Score", v: project.risk_score + "/100", c: "text-amber-400", bg: "bg-amber-500/10", I: ShieldAlert },
+          { l: "Findings", v: engFindings.length, c: "text-orange-400", bg: "bg-orange-500/10", I: Bug },
           { l: "Critical", v: critCount, c: critCount > 0 ? "text-red-400" : "text-emerald-400", bg: critCount > 0 ? "bg-red-500/10" : "bg-emerald-500/10", I: AlertTriangle },
           { l: "High", v: highCount, c: "text-orange-300", bg: "bg-orange-500/10", I: FileWarning },
-          { l: "Layers Tested", v: `${new Set(MOCK_FINDINGS.map(f=>f.layer)).size}/6`, c: "text-blue-400", bg: "bg-blue-500/10", I: Layers },
+          { l: "Layers Tested", v: `${new Set(engFindings.map(f=>f.layer)).size}/6`, c: "text-blue-400", bg: "bg-blue-500/10", I: Layers },
         ].map(x => (
           <div key={x.l} className={`${G} rounded-lg p-3.5`}>
             <div className={`w-7 h-7 rounded-md ${x.bg} flex items-center justify-center mb-2`}><x.I size={14} className={x.c} /></div>
@@ -265,7 +268,7 @@ function OverviewPage({ engagement }) {
           {layers.map(([key, m]) => {
             const Icon = m.icon;
             const count = findingsByLayer[key] || 0;
-            const inScope = engagement.scope?.includes(key);
+            const inScope = project.scope?.includes(key);
             return (
               <div key={key} className={`${G} rounded-lg p-4 ${!inScope ? "opacity-30" : ""}`}>
                 <div className="flex items-center gap-3 mb-3">
@@ -297,7 +300,7 @@ function OverviewPage({ engagement }) {
       <div>
         <div className="text-[10px] font-semibold text-white/25 uppercase tracking-widest mb-3">Critical & high findings</div>
         <div className="space-y-2">
-          {MOCK_FINDINGS.filter(f => f.severity === "critical" || f.severity === "high").map(f => {
+          {engFindings.filter(f => f.severity === "critical" || f.severity === "high").map(f => {
             const lm = LAYER_META[f.layer];
             const sv = SEV[f.severity];
             return (
@@ -319,12 +322,12 @@ function OverviewPage({ engagement }) {
 /* ═══════════════════════════════════
    TARGET SETUP PAGE
    ═══════════════════════════════════ */
-function TargetPage({ engagement }) {
-  const [method, setMethod] = useState(engagement.target_type || "api_endpoint");
+function TargetPage({ project }) {
+  const [method, setMethod] = useState(project.target_type || "api_endpoint");
   const [file, setFile] = useState(null);
   const [framework, setFramework] = useState("pytorch");
-  const [url, setUrl] = useState(engagement.target_config?.url || "");
-  const [authHeaders, setAuthHeaders] = useState(engagement.target_config?.auth || "");
+  const [url, setUrl] = useState(project.target_config?.url || "");
+  const [authHeaders, setAuthHeaders] = useState(project.target_config?.auth || "");
   const [inputShape, setInputShape] = useState("");
   const [provider, setProvider] = useState("Anthropic (Claude)");
   const [apiKey, setApiKey] = useState("");
@@ -363,7 +366,7 @@ function TargetPage({ engagement }) {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("engagement_id", engagement.id);
+      formData.append("project_id", project.id);
       formData.append("framework", framework);
       formData.append("gpu", "false");
       const resp = await fetch("/api/v2/sandbox/create", { method: "POST", body: formData });
@@ -588,7 +591,7 @@ function TargetPage({ engagement }) {
       {/* Scope selection */}
       <div className={`${G} rounded-lg p-5`}>
         <h3 className="text-sm font-medium text-white/70 mb-3">Attack Surface Scope</h3>
-        <p className="text-[10px] text-white/25 mb-3">Select which layers to include in this engagement. Grayed-out attacks require a different access method.</p>
+        <p className="text-[10px] text-white/25 mb-3">Select which layers to include in this project. Grayed-out attacks require a different access method.</p>
         <div className="grid grid-cols-3 gap-2">
           {Object.entries(LAYER_META).map(([key, m]) => {
             const Icon = m.icon;
@@ -614,10 +617,10 @@ function TargetPage({ engagement }) {
 /* ═══════════════════════════════════
    ATTACK LAYER PAGE (reusable)
    ═══════════════════════════════════ */
-function LayerPage({ layerKey, engagement }) {
+function LayerPage({ layerKey, project }) {
   const meta = LAYER_META[layerKey];
   const attacks = LAYER_ATTACKS[layerKey] || [];
-  const findings = MOCK_FINDINGS.filter(f => f.layer === layerKey);
+  const findings = MOCK_FINDINGS.filter(f => f.layer === layerKey && f.project_id === project.id);
   const [sel, setSel] = useState(null);
   const Icon = meta.icon;
 
@@ -661,7 +664,7 @@ function LayerPage({ layerKey, engagement }) {
         <div className={`${G} rounded-lg p-5`}>
           <h3 className="text-sm font-medium mb-3" style={{ color: meta.color }}>Run: {sel.name}</h3>
           <div className="grid grid-cols-3 gap-4 mb-4">
-            <div><label className="text-[10px] text-white/35 block mb-1">Target</label><div className="px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-[11px] text-white/40 font-mono">{engagement.name}</div></div>
+            <div><label className="text-[10px] text-white/35 block mb-1">Target</label><div className="px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-[11px] text-white/40 font-mono">{project.name}</div></div>
             {layerKey === "inference" && sel.id.startsWith("fgsm") && (
               <div><label className="text-[10px] text-white/35 block mb-1">Epsilon (ε)</label><input type="number" defaultValue={0.03} step={0.01} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] font-mono focus:outline-none focus:border-emerald-500/30" /></div>
             )}
@@ -707,25 +710,26 @@ function LayerPage({ layerKey, engagement }) {
 /* ═══════════════════════════════════
    FINDINGS PAGE
    ═══════════════════════════════════ */
-function FindingsPage() {
+function FindingsPage({ project }) {
   const [filter, setFilter] = useState("all");
-  const filtered = filter === "all" ? MOCK_FINDINGS : MOCK_FINDINGS.filter(f => f.layer === filter);
+  const engFindings = MOCK_FINDINGS.filter(f => f.project_id === project.id);
+  const filtered = filter === "all" ? engFindings : engFindings.filter(f => f.layer === filter);
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-white mb-0.5">Findings</h1>
-          <p className="text-sm text-white/35">{MOCK_FINDINGS.length} findings across {new Set(MOCK_FINDINGS.map(f=>f.layer)).size} layers</p>
+          <p className="text-sm text-white/35">{engFindings.length} findings for {project.name}</p>
         </div>
         <button className="flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 text-[11px] font-medium hover:bg-emerald-600/30"><Download size={13} />Export Findings</button>
       </div>
 
       {/* Layer filter */}
       <div className="flex gap-1.5 flex-wrap">
-        <button onClick={() => setFilter("all")} className={`px-3 py-1.5 rounded-md text-[10px] font-medium transition-all ${filter === "all" ? "bg-emerald-500/12 text-emerald-400 border border-emerald-500/20" : `${G} text-white/40 hover:text-white/60`}`}>All ({MOCK_FINDINGS.length})</button>
+        <button onClick={() => setFilter("all")} className={`px-3 py-1.5 rounded-md text-[10px] font-medium transition-all ${filter === "all" ? "bg-emerald-500/12 text-emerald-400 border border-emerald-500/20" : `${G} text-white/40 hover:text-white/60`}`}>All ({engFindings.length})</button>
         {Object.entries(LAYER_META).map(([key, m]) => {
-          const count = MOCK_FINDINGS.filter(f => f.layer === key).length;
+          const count = engFindings.filter(f => f.layer === key).length;
           if (count === 0) return null;
           return (
             <button key={key} onClick={() => setFilter(key)} className={`px-3 py-1.5 rounded-md text-[10px] font-medium transition-all ${filter === key ? `${m.bg} border ${m.bd}` : `${G} text-white/40 hover:text-white/60`}`} style={filter === key ? { color: m.color } : undefined}>
@@ -791,7 +795,7 @@ function FindingsPage() {
 /* ═══════════════════════════════════
    REPORT GENERATOR PAGE
    ═══════════════════════════════════ */
-function ReportPage({ engagement }) {
+function ReportPage({ project }) {
   const sections = [
     { name: "Executive Summary", desc: "Risk score, key findings, target overview", auto: true },
     { name: "Training Phase", desc: `${MOCK_FINDINGS.filter(f=>f.layer==="training").length} findings`, auto: true },
@@ -836,11 +840,11 @@ function ReportPage({ engagement }) {
       <div className={`${G} rounded-lg p-5`}>
         <div className="text-[10px] text-white/25 uppercase tracking-widest mb-3">Report preview</div>
         <div className="font-mono text-[11px] text-white/40 space-y-1">
-          <div>Engagement: <span className="text-emerald-400">{engagement.name}</span></div>
-          <div>Target: <span className="text-white/60">{engagement.target_type.replace("_"," ")}</span></div>
+          <div>Project: <span className="text-emerald-400">{project.name}</span></div>
+          <div>Target: <span className="text-white/60">{project.target_type.replace("_"," ")}</span></div>
           <div>Findings: <span className="text-orange-400">{MOCK_FINDINGS.length}</span> ({MOCK_FINDINGS.filter(f=>f.severity==="critical").length} critical, {MOCK_FINDINGS.filter(f=>f.severity==="high").length} high)</div>
           <div>Layers tested: <span className="text-white/60">{new Set(MOCK_FINDINGS.map(f=>f.layer)).size}/6</span></div>
-          <div>Risk score: <span className="text-amber-400">{engagement.risk_score}/100 (medium)</span></div>
+          <div>Risk score: <span className="text-amber-400">{project.risk_score}/100 (medium)</span></div>
           <div>Cross-layer connections: <span className="text-violet-400">{MOCK_FINDINGS.reduce((s,f) => s + f.related.length, 0)}</span></div>
         </div>
       </div>
@@ -1014,7 +1018,7 @@ function AtlasPage(){
 /* ═══════════════════════════════════
    GOVERNANCE / AI RISK MANAGEMENT
    ═══════════════════════════════════ */
-function GovernancePage({ engagement }) {
+function GovernancePage({ project }) {
   const [activeTab, setActiveTab] = useState("rmf");
   const [expandedRmf, setExpandedRmf] = useState(null);
 
@@ -1227,6 +1231,153 @@ function MonitoringPage() {
 }
 
 /* ═══════════════════════════════════
+   SECURE PIPELINE PAGE
+   ═══════════════════════════════════ */
+function PipelinePage({ project }) {
+  const STAGES = [
+    { name: "Data Ingestion", icon: Database, color: "text-blue-400", bg: "bg-blue-500/10", bd: "border-blue-500/20",
+      checks: [
+        { id: "di_01", name: "Schema validation", desc: "Validate input data against expected schema" },
+        { id: "di_02", name: "Format check", desc: "Verify data format and encoding" },
+        { id: "di_03", name: "Data integrity", desc: "Checksum verification on data batches" },
+        { id: "di_04", name: "PII scan", desc: "Detect personal identifiable information" },
+        { id: "di_05", name: "Source authentication", desc: "Verify data source identity" },
+        { id: "di_06", name: "Provenance tracking", desc: "Track data lineage and origin" },
+        { id: "di_07", name: "Poison detection", desc: "Statistical outlier detection on training data" },
+        { id: "di_08", name: "Outlier detection", desc: "Flag anomalous samples in data pipeline" },
+        { id: "di_09", name: "Volume validation", desc: "Check data batch size within expected range" },
+      ]},
+    { name: "Model Validation", icon: Cpu, color: "text-emerald-400", bg: "bg-emerald-500/10", bd: "border-emerald-500/20",
+      checks: [
+        { id: "mv_01", name: "Architecture review", desc: "Verify model architecture matches specification" },
+        { id: "mv_02", name: "Weight integrity", desc: "Hash verification on model weights" },
+        { id: "mv_03", name: "Backdoor scan", desc: "Check for embedded trigger patterns" },
+        { id: "mv_04", name: "Version control", desc: "Model versioning and change tracking" },
+        { id: "mv_05", name: "Supply chain audit", desc: "Verify pretrained model provenance" },
+        { id: "mv_06", name: "Performance baseline", desc: "Accuracy within expected threshold" },
+        { id: "mv_07", name: "Robustness check", desc: "Adversarial perturbation tolerance" },
+        { id: "mv_08", name: "Fairness check", desc: "Bias metrics across protected groups" },
+        { id: "mv_09", name: "Reproducibility", desc: "Deterministic output for fixed seed" },
+        { id: "mv_10", name: "Dependency scan", desc: "Check ML libraries for known CVEs" },
+      ]},
+    { name: "Prompt Filtering", icon: Filter, color: "text-amber-400", bg: "bg-amber-500/10", bd: "border-amber-500/20",
+      checks: [
+        { id: "pf_01", name: "Input sanitization", desc: "Strip dangerous characters and markup" },
+        { id: "pf_02", name: "Injection detection", desc: "Detect prompt injection patterns" },
+        { id: "pf_03", name: "Encoding bypass check", desc: "Block base64/unicode obfuscation" },
+        { id: "pf_04", name: "Length validation", desc: "Enforce max prompt length" },
+        { id: "pf_05", name: "Language filter", desc: "Block disallowed languages/scripts" },
+        { id: "pf_06", name: "Context boundary", desc: "Enforce system/user prompt separation" },
+        { id: "pf_07", name: "Jailbreak detection", desc: "Pattern matching for known jailbreaks" },
+        { id: "pf_08", name: "Token budget", desc: "Limit token consumption per request" },
+      ]},
+    { name: "API Security", icon: Lock, color: "text-violet-400", bg: "bg-violet-500/10", bd: "border-violet-500/20",
+      checks: [
+        { id: "as_01", name: "Authentication", desc: "OAuth2/JWT token validation" },
+        { id: "as_02", name: "Rate limiting", desc: "Query throttling per API key" },
+        { id: "as_03", name: "TLS enforcement", desc: "Require HTTPS with TLS 1.3+" },
+        { id: "as_04", name: "Encryption at rest", desc: "Model and data encrypted on disk" },
+        { id: "as_05", name: "CORS policy", desc: "Restrict cross-origin requests" },
+        { id: "as_06", name: "Input size limit", desc: "Max payload size enforcement" },
+        { id: "as_07", name: "API versioning", desc: "Version headers and deprecation" },
+        { id: "as_08", name: "Key rotation", desc: "API key rotation policy enforced" },
+        { id: "as_09", name: "IP allowlisting", desc: "Source IP restriction for admin endpoints" },
+      ]},
+    { name: "Monitoring", icon: Activity, color: "text-rose-400", bg: "bg-rose-500/10", bd: "border-rose-500/20",
+      checks: [
+        { id: "mo_01", name: "Query logging", desc: "Log all inference requests with metadata" },
+        { id: "mo_02", name: "Output guardrails", desc: "Filter harmful or sensitive outputs" },
+        { id: "mo_03", name: "Response watermarking", desc: "Embed provenance in model outputs" },
+        { id: "mo_04", name: "Output truncation", desc: "Limit response length to prevent data leak" },
+        { id: "mo_05", name: "Context isolation", desc: "Prevent cross-session data leakage" },
+        { id: "mo_06", name: "Drift detection", desc: "Monitor input/output distribution shift" },
+        { id: "mo_07", name: "Anomaly alerting", desc: "Alert on unusual query patterns" },
+        { id: "mo_08", name: "Audit trail", desc: "Immutable log of all system changes" },
+        { id: "mo_09", name: "Latency monitoring", desc: "Track inference response time" },
+        { id: "mo_10", name: "Error rate tracking", desc: "Monitor and alert on error spikes" },
+      ]},
+  ];
+
+  const [checks, setChecks] = useState(() => {
+    const init = {};
+    STAGES.forEach(s => s.checks.forEach(c => { init[c.id] = Math.random() > 0.3; }));
+    return init;
+  });
+
+  const toggle = (id) => setChecks(prev => ({ ...prev, [id]: !prev[id] }));
+
+  const totalChecks = STAGES.reduce((s, st) => s + st.checks.length, 0);
+  const passedChecks = Object.values(checks).filter(Boolean).length;
+  const health = Math.round((passedChecks / totalChecks) * 100);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div><h1 className="text-xl font-semibold text-white mb-0.5">Secure Pipeline</h1>
+        <p className="text-sm text-white/35">{totalChecks} security controls across {STAGES.length} stages — {project.name}</p></div>
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <div className={`text-lg font-bold font-mono ${health >= 80 ? "text-emerald-400" : health >= 50 ? "text-amber-400" : "text-red-400"}`}>{health}%</div>
+            <div className="text-[9px] text-white/25">Pipeline health</div>
+          </div>
+          <div className="text-right">
+            <div className="text-lg font-bold font-mono text-white/70">{passedChecks}/{totalChecks}</div>
+            <div className="text-[9px] text-white/25">Controls passing</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Health bar */}
+      <div className="w-full h-2 rounded-full bg-white/[0.06] overflow-hidden">
+        <div className={`h-full rounded-full transition-all duration-500 ${health >= 80 ? "bg-emerald-500" : health >= 50 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${health}%` }} />
+      </div>
+
+      {/* Stages */}
+      {STAGES.map(stage => {
+        const Icon = stage.icon;
+        const stagePass = stage.checks.filter(c => checks[c.id]).length;
+        const stagePct = Math.round((stagePass / stage.checks.length) * 100);
+        return (
+          <div key={stage.name} className={`${G} rounded-lg overflow-hidden`}>
+            <div className="px-5 py-4 flex items-center gap-3">
+              <div className={`w-9 h-9 rounded-lg ${stage.bg} border ${stage.bd} flex items-center justify-center`}>
+                <Icon size={16} className={stage.color} />
+              </div>
+              <div className="flex-1">
+                <div className={`text-[13px] font-medium ${stage.color}`}>{stage.name}</div>
+                <div className="text-[10px] text-white/30">{stage.checks.length} controls</div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className={`text-[10px] font-mono ${stagePct >= 80 ? "text-emerald-400" : stagePct >= 50 ? "text-amber-400" : "text-red-400"}`}>{stagePass}/{stage.checks.length}</span>
+                <div className="w-16 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                  <div className={`h-full rounded-full ${stagePct >= 80 ? "bg-emerald-500" : stagePct >= 50 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${stagePct}%` }} />
+                </div>
+              </div>
+            </div>
+            <div className="px-5 pb-4 space-y-1">
+              {stage.checks.map(c => (
+                <div key={c.id} className="flex items-center gap-3 px-3 py-2 rounded-md bg-white/[0.02] hover:bg-white/[0.03] transition-colors">
+                  <button onClick={() => toggle(c.id)} className={`w-5 h-5 rounded flex items-center justify-center border transition-all shrink-0 ${checks[c.id] ? "bg-emerald-600 border-emerald-500" : "bg-transparent border-white/15 hover:border-white/25"}`}>
+                    {checks[c.id] && <Check size={12} className="text-white" />}
+                  </button>
+                  <div className="flex-1">
+                    <span className={`text-[11px] ${checks[c.id] ? "text-white/65" : "text-white/35"}`}>{c.name}</span>
+                    <span className="text-[9px] text-white/20 ml-2">{c.desc}</span>
+                  </div>
+                  <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded ${checks[c.id] ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
+                    {checks[c.id] ? "PASS" : "FAIL"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════
    PLACEHOLDER PAGES
    ═══════════════════════════════════ */
 function PlaceholderPage({ title, desc }) {
@@ -1243,15 +1394,15 @@ function PlaceholderPage({ title, desc }) {
    ═══════════════════════════════════ */
 export default function App() {
   const [page, setPage] = useState("overview");
-  const [engagements, setEngagements] = useState(MOCK_ENGAGEMENTS);
-  const [engagementId, setEngagementId] = useState(MOCK_ENGAGEMENTS[0].id);
-  const engagement = engagements.find(e => e.id === engagementId) || engagements[0];
+  const [projects, setProjects] = useState(MOCK_PROJECTS);
+  const [projectId, setProjectId] = useState(MOCK_PROJECTS[0].id);
+  const project = projects.find(e => e.id === projectId) || projects[0];
 
-  const handleNewEngagement = () => {
-    const name = prompt("Engagement name:");
+  const handleNewProject = () => {
+    const name = prompt("Project name:");
     if (!name) return;
     const newEng = {
-      id: Math.max(...engagements.map(e => e.id)) + 1,
+      id: Math.max(...projects.map(e => e.id)) + 1,
       name,
       target_type: "api_endpoint",
       target_config: {},
@@ -1259,33 +1410,33 @@ export default function App() {
       status: "active",
       risk_score: 0,
     };
-    setEngagements([...engagements, newEng]);
-    setEngagementId(newEng.id);
+    setProjects([...projects, newEng]);
+    setProjectId(newEng.id);
     setPage("target");
   };
 
   const getContent = () => {
-    if (page === "overview") return <OverviewPage engagement={engagement} />;
-    if (page === "target") return <TargetPage engagement={engagement} />;
-    if (page.startsWith("layer_")) return <LayerPage layerKey={page.replace("layer_", "")} engagement={engagement} />;
-    if (page === "findings") return <FindingsPage />;
-    if (page === "report") return <ReportPage engagement={engagement} />;
-    if (page === "governance") return <GovernancePage engagement={engagement} />;
+    if (page === "overview") return <OverviewPage project={project} />;
+    if (page === "target") return <TargetPage project={project} />;
+    if (page.startsWith("layer_")) return <LayerPage layerKey={page.replace("layer_", "")} project={project} />;
+    if (page === "findings") return <FindingsPage project={project} />;
+    if (page === "report") return <ReportPage project={project} />;
+    if (page === "governance") return <GovernancePage project={project} />;
     if (page === "monitoring") return <MonitoringPage />;
-    if (page === "pipeline_checks") return <PlaceholderPage title="Secure Pipeline" desc="46 security controls across 5 stages" />;
+    if (page === "pipeline_checks") return <PipelinePage project={project} />;
     if (page === "atlas") return <AtlasPage />;
-    if (page === "team") return <PlaceholderPage title="Team" desc="User management and engagement assignments" />;
+    if (page === "team") return <PlaceholderPage title="Team" desc="User management and project assignments" />;
     if (page === "knowledge") return <PlaceholderPage title="Knowledge Base" desc="Notes, policies, and templates" />;
     if (page === "alerts") return <PlaceholderPage title="Alerts" desc="Severity-based notifications" />;
     if (page === "settings") return <PlaceholderPage title="Settings" desc="API keys, sandbox config, audit log" />;
-    return <OverviewPage engagement={engagement} />;
+    return <OverviewPage project={project} />;
   };
 
   return (
     <div className="flex h-screen bg-[#080b12] text-white overflow-hidden" style={{ fontFamily: "'DM Sans',system-ui,sans-serif" }}>
       <div className="fixed inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse 60% 40% at 20% 10%,rgba(46,204,113,0.03),transparent),radial-gradient(ellipse 50% 50% at 80% 80%,rgba(184,115,51,0.02),transparent)" }} />
-      <Sidebar page={page} setPage={setPage} engagement={engagement}
-        engagements={engagements} onSelectEngagement={setEngagementId} onNewEngagement={handleNewEngagement} />
+      <Sidebar page={page} setPage={setPage} project={project}
+        projects={projects} onSelectProject={setProjectId} onNewProject={handleNewProject} />
       <main className="flex-1 overflow-y-auto relative z-10 p-6 pb-20">{getContent()}</main>
     </div>
   );
