@@ -99,6 +99,20 @@ def init_db():
             pinned INTEGER DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now'))
         );
+         CREATE TABLE IF NOT EXISTS sandboxes (
+             id INTEGER PRIMARY KEY AUTOINCREMENT,
+             project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+             container_id TEXT,
+             status TEXT DEFAULT 'creating',
+             framework TEXT,
+             model_filename TEXT,
+             model_size_bytes INTEGER,
+             port INTEGER,
+             gpu_enabled INTEGER DEFAULT 0,
+             created_at TEXT DEFAULT (datetime('now')),
+             destroyed_at TEXT,
+             error TEXT
+         );
         """)
 
         # Seed default admin if no users exist
@@ -376,3 +390,43 @@ def get_dashboard_stats(project_id=None):
             "total_results": total_results,
             "active_users": total_users,
         }
+# ══════════════════════════════════
+#  SANDBOXES
+# ══════════════════════════════════
+
+def save_sandbox(sandbox_dict):
+    with get_db() as db:
+        db.execute(
+            '''INSERT INTO sandboxes (id, project_id, container_id, status,
+                                      framework, model_filename, model_size_bytes, port, gpu_enabled)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (sandbox_dict.get('id'), sandbox_dict.get('project_id'),
+             sandbox_dict.get('container_id'), sandbox_dict.get('status'),
+             sandbox_dict.get('framework'), sandbox_dict.get('model_filename'),
+             sandbox_dict.get('model_size_bytes'), sandbox_dict.get('port'),
+             1 if sandbox_dict.get('gpu_enabled') else 0)
+        )
+
+def update_sandbox_status(sandbox_id, status):
+    with get_db() as db:
+        db.execute(
+            "UPDATE sandboxes SET status = ?, destroyed_at = datetime('now') WHERE id = ?",
+            (status, sandbox_id)
+        )
+
+def get_sandboxes(project_id=None):
+    with get_db() as db:
+        if project_id:
+            rows = db.execute(
+                "SELECT * FROM sandboxes WHERE project_id = ? ORDER BY created_at DESC",
+                (project_id,)
+            ).fetchall()
+        else:
+            rows = db.execute(
+                "SELECT * FROM sandboxes ORDER BY created_at DESC"
+            ).fetchall()
+        return rows_to_list(rows)
+
+def delete_sandbox_record(sandbox_id):
+    with get_db() as db:
+        db.execute("DELETE FROM sandboxes WHERE id = ?", (sandbox_id,))

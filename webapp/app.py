@@ -23,6 +23,7 @@ from src.utils.logger import setup_logger, get_logger, get_project_root
 setup_logger(get_project_root())
 logger = get_logger("webapp")
 
+
 app = Flask(__name__)
 CORS(app)
 
@@ -38,6 +39,9 @@ register_prompt_injection_routes(app)
 # Project management + attack API routes (v2)
 from webapp.routes_api import register_api_routes
 register_api_routes(app)
+
+from webapp.routes_sandbox import sandbox_bp
+app.register_blueprint(sandbox_bp)
 
 RESULTS_DIR = Path("results")
 RESULTS_DIR.mkdir(exist_ok=True)

@@ -1,112 +1,276 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
-  Shield, ShieldCheck, ShieldAlert, Activity, Users, BookOpen, Bell, Settings,
-  ChevronRight, Plus, Trash2, Edit3, Search, Check, AlertTriangle,
-  Lock, Unlock, Database, Cpu, FileText, Layers, Filter,
-  Mail, UserPlus, Key, Globe, Zap, Download, ExternalLink,
-  CheckCircle2, XCircle, ChevronDown, LayoutDashboard, Play, Loader2, Target
+  Shield, ShieldCheck, ShieldAlert, ChevronRight, Plus, Search,
+  Check, AlertTriangle, Lock, Database, Cpu, FileText, Layers, Filter,
+  Globe, Zap, Download, ExternalLink, CheckCircle2, XCircle,
+  ChevronDown, Play, Loader2, Target, Upload, Server, Terminal,
+  MessageSquare, Eye, Bug, Box, Network, Radio, BarChart3,
+  FileWarning, Unplug, Fingerprint, Brain, Workflow, ArrowRight,
+  Settings, Users, BookOpen, Bell, Activity, Gauge,
+  TrendingUp, TrendingDown, Minus
 } from "lucide-react";
+
+const G = "bg-white/[0.04] backdrop-blur-xl border border-white/[0.08]";
+const GS = "bg-white/[0.06] backdrop-blur-xl border border-white/[0.1]";
 
 /* ── API helpers ── */
 const API2 = "/api/v2";
 const api = {
   get: u => fetch(API2+u).then(r=>r.json()),
   post: (u,b) => fetch(API2+u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  put: (u,b) => fetch(API2+u,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  del: u => fetch(API2+u,{method:"DELETE"}).then(r=>r.json()),
 };
-/* ATLAS uses /api/atlas (not v2) */
 const atlas = { get: u => fetch("/api/atlas"+u).then(r=>r.json()) };
 
-/* ── Design tokens ── */
-const G  = "bg-white/[0.04] backdrop-blur-xl border border-white/[0.08]";
-const GS = "bg-white/[0.06] backdrop-blur-xl border border-white/[0.1]";
-const SV = {
-  critical:{bg:"bg-red-500/10",bd:"border-red-500/20",tx:"text-red-400",dt:"bg-red-400"},
-  high:{bg:"bg-orange-500/10",bd:"border-orange-500/20",tx:"text-orange-400",dt:"bg-orange-400"},
-  medium:{bg:"bg-amber-500/10",bd:"border-amber-500/20",tx:"text-amber-400",dt:"bg-amber-400"},
-  low:{bg:"bg-blue-500/10",bd:"border-blue-500/20",tx:"text-blue-400",dt:"bg-blue-400"},
+/* Module labels for ATLAS mapping (maps backend module keys → display names) */
+const MOD_LABELS = {
+  adversarial:"Adversarial", data_poisoning:"Data Poisoning", evasion:"Evasion",
+  model_extraction:"Model Extraction", prompt_injection:"Prompt Injection"
 };
-const STG = [
-  {k:"data_ingestion",l:"Data Ingestion",I:Database},
-  {k:"model_validation",l:"Model Validation",I:Cpu},
-  {k:"prompt_filtering",l:"Prompt Filtering",I:Filter},
-  {k:"api_security",l:"API Security",I:Globe},
-  {k:"monitoring",l:"Monitoring",I:Activity},
+
+/* ── COLOR SYSTEM ── */
+const LAYER_META = {
+  training:     { label: "Training Phase",    color: "#60a5fa", bg: "bg-blue-500/10",    bd: "border-blue-500/20",    tx: "text-blue-400",    icon: Brain,        tag: "TRN" },
+  inference:    { label: "Inference Phase",   color: "#34d399", bg: "bg-emerald-500/10",  bd: "border-emerald-500/20",  tx: "text-emerald-400", icon: Zap,          tag: "INF" },
+  artifacts:    { label: "Model Artifacts",   color: "#fb923c", bg: "bg-orange-500/10",   bd: "border-orange-500/20",   tx: "text-orange-400",  icon: Box,          tag: "ART" },
+  pipeline:     { label: "Data Pipeline",     color: "#f87171", bg: "bg-red-500/10",      bd: "border-red-500/20",      tx: "text-red-400",     icon: Workflow,     tag: "DPL" },
+  infra:        { label: "Infrastructure",    color: "#a78bfa", bg: "bg-violet-500/10",   bd: "border-violet-500/20",   tx: "text-violet-400",  icon: Server,       tag: "INF" },
+  output:       { label: "Output Layer",      color: "#fbbf24", bg: "bg-amber-500/10",    bd: "border-amber-500/20",    tx: "text-amber-400",   icon: MessageSquare,tag: "OUT" },
+};
+
+const SEV = {
+  critical: { bg: "bg-red-500/10",    bd: "border-red-500/20",    tx: "text-red-400",    dot: "bg-red-400"    },
+  high:     { bg: "bg-orange-500/10",  bd: "border-orange-500/20",  tx: "text-orange-400",  dot: "bg-orange-400"  },
+  medium:   { bg: "bg-amber-500/10",   bd: "border-amber-500/20",   tx: "text-amber-400",   dot: "bg-amber-400"   },
+  low:      { bg: "bg-blue-500/10",    bd: "border-blue-500/20",    tx: "text-blue-400",    dot: "bg-blue-400"    },
+  info:     { bg: "bg-white/[0.04]",   bd: "border-white/[0.08]",   tx: "text-white/40",    dot: "bg-white/20"    },
+};
+
+/* ── LAYER ATTACK DEFINITIONS ── */
+const LAYER_ATTACKS = {
+  training: [
+    { id: "poison_label",   name: "Label-flip poisoning",     difficulty: "Intermediate", atlas: "AML.T0020.000", access: ["upload","registry"] },
+    { id: "poison_backdoor", name: "Backdoor implant",        difficulty: "Advanced",     atlas: "AML.T0020.001", access: ["upload","registry"] },
+    { id: "supply_chain",   name: "Supply chain compromise",  difficulty: "Advanced",     atlas: "AML.T0010",     access: ["registry"] },
+    { id: "clean_label",    name: "Clean-label poisoning",    difficulty: "Expert",       atlas: "AML.T0020",     access: ["upload"] },
+  ],
+  inference: [
+    { id: "fgsm",           name: "FGSM",                    difficulty: "Beginner",     atlas: "AML.T0043.001", access: ["upload"] },
+    { id: "pgd",            name: "PGD",                     difficulty: "Intermediate", atlas: "AML.T0043.001", access: ["upload"] },
+    { id: "evasion_pixel",  name: "Pixel perturbation",      difficulty: "Beginner",     atlas: "AML.T0047",     access: ["upload","api"] },
+    { id: "evasion_noise",  name: "Gaussian noise",          difficulty: "Beginner",     atlas: "AML.T0047",     access: ["upload","api"] },
+    { id: "evasion_spatial", name: "Spatial transform",      difficulty: "Intermediate", atlas: "AML.T0047.003", access: ["upload","api"] },
+    { id: "model_inversion", name: "Model inversion",        difficulty: "Expert",       atlas: "AML.T0024",     access: ["api"] },
+  ],
+  artifacts: [
+    { id: "extract_random", name: "Model extraction (random)",  difficulty: "Intermediate", atlas: "AML.T0044", access: ["api"] },
+    { id: "extract_active", name: "Model extraction (active)",  difficulty: "Advanced",     atlas: "AML.T0044", access: ["api"] },
+    { id: "weight_exfil",   name: "Weight exfiltration",        difficulty: "Advanced",     atlas: "AML.T0024", access: ["upload","registry"] },
+    { id: "arch_reverse",   name: "Architecture reverse eng.",   difficulty: "Expert",       atlas: "AML.T0005", access: ["api"] },
+  ],
+  pipeline: [
+    { id: "tainted_data",   name: "Tainted dataset injection",  difficulty: "Intermediate", atlas: "AML.T0020", access: ["upload","registry"] },
+    { id: "label_corrupt",  name: "Label corruption",           difficulty: "Beginner",     atlas: "AML.T0020.000", access: ["upload","registry"] },
+    { id: "scraping_abuse", name: "Scraping / API abuse",       difficulty: "Beginner",     atlas: null,             access: ["api"] },
+    { id: "provenance_spoof", name: "Provenance spoofing",     difficulty: "Advanced",     atlas: "AML.T0010",     access: ["registry"] },
+  ],
+  infra: [
+    { id: "rate_limit",     name: "Rate limit bypass",          difficulty: "Beginner",     atlas: "AML.T0005",     access: ["api"] },
+    { id: "auth_bypass",    name: "Authentication bypass",      difficulty: "Intermediate", atlas: null,             access: ["api"] },
+    { id: "registry_audit", name: "Registry access audit",      difficulty: "Intermediate", atlas: "AML.T0010",     access: ["registry"] },
+    { id: "misconfig",      name: "Serving misconfiguration",   difficulty: "Intermediate", atlas: null,             access: ["api"] },
+  ],
+  output: [
+    { id: "inject_direct",  name: "Direct prompt injection",    difficulty: "Beginner",     atlas: "AML.T0051.000", access: ["llm"] },
+    { id: "inject_indirect", name: "Indirect injection",        difficulty: "Advanced",     atlas: "AML.T0051.001", access: ["llm"] },
+    { id: "prompt_leak",    name: "System prompt leakage",      difficulty: "Intermediate", atlas: "AML.T0053",     access: ["llm"] },
+    { id: "jailbreak",      name: "LLM jailbreak",              difficulty: "Intermediate", atlas: "AML.T0054",     access: ["llm"] },
+    { id: "guardrail_bypass", name: "Output guardrail bypass",  difficulty: "Advanced",     atlas: null,             access: ["llm","api"] },
+    { id: "hallucination",  name: "Hallucination probing",      difficulty: "Beginner",     atlas: null,             access: ["llm"] },
+  ],
+};
+
+/* ── MOCK DATA ── */
+const MOCK_ENGAGEMENT = {
+  id: 1, name: "FinCorp Fraud Model", target_type: "api_endpoint",
+  target_config: { url: "https://api.fincorp.internal/v2/fraud/predict", auth: "Bearer ••••••" },
+  scope: ["training","inference","artifacts","infra","output"],
+  status: "active", risk_score: 38,
+};
+const MOCK_SANDBOX = {
+  id: 1, engagement_id: 2, status: "running", framework: "pytorch",
+  filename: "resnet50_medical.pt", port: 5001, gpu: true, uptime: "2h 14m",
+};
+const MOCK_FINDINGS = [
+  { id: "F-001", layer: "inference", attack: "fgsm", severity: "high", title: "FGSM drops accuracy 56% at ε=0.03", metrics: { accuracy_drop: 56.4, asr: 57.9 }, atlas: "AML.T0043.001", related: ["F-003"], status: "open" },
+  { id: "F-002", layer: "output", attack: "inject_direct", severity: "critical", title: "Direct injection bypasses system prompt", metrics: { asr: 40, defended: 6, injected: 4 }, atlas: "AML.T0051.000", related: ["F-004"], status: "open" },
+  { id: "F-003", layer: "infra", attack: "rate_limit", severity: "medium", title: "No rate limiting on /predict endpoint", metrics: { queries_before_block: "unlimited" }, atlas: "AML.T0005", related: ["F-001"], status: "in_progress" },
+  { id: "F-004", layer: "output", attack: "prompt_leak", severity: "high", title: "System prompt leaked via fictional framing", metrics: { leaked_secrets: 2 }, atlas: "AML.T0053", related: ["F-002"], status: "open" },
+  { id: "F-005", layer: "artifacts", attack: "extract_random", severity: "high", title: "Model cloned with 91% fidelity in 1000 queries", metrics: { fidelity: 91.4, queries: 1000 }, atlas: "AML.T0044", related: ["F-003"], status: "open" },
+  { id: "F-006", layer: "training", attack: "poison_backdoor", severity: "critical", title: "Backdoor trigger achieves 94% ASR", metrics: { backdoor_asr: 94.2, poison_rate: 0.1 }, atlas: "AML.T0020.001", related: [], status: "open" },
 ];
-const ATK = [
-  {id:"adversarial",l:"Adversarial",t:"ADV",f:[{k:"attack",l:"Method",ty:"select",o:[["fgsm","FGSM"],["pgd","PGD"]],d:"fgsm"},{k:"epsilon",l:"Epsilon",ty:"number",d:0.03,s:0.01}]},
-  {id:"data_poisoning",l:"Data Poisoning",t:"PSN",f:[{k:"strategy",l:"Strategy",ty:"select",o:[["label_flip","Label Flip"],["backdoor","Backdoor"]],d:"label_flip"},{k:"poison_rate",l:"Poison Rate",ty:"number",d:0.1,s:0.05}]},
-  {id:"evasion",l:"Evasion",t:"EVA",f:[{k:"method",l:"Method",ty:"select",o:[["pixel","Pixel"],["noise","Noise"],["spatial","Spatial"]],d:"pixel"}]},
-  {id:"model_extraction",l:"Model Extraction",t:"EXT",f:[{k:"queries",l:"Queries",ty:"number",d:500,s:100}]},
-  {id:"prompt_injection",l:"Prompt Injection",t:"INJ",f:[],link:true},
-];
-const MOD_LABELS = {adversarial:"Adversarial",data_poisoning:"Data Poisoning",evasion:"Evasion",model_extraction:"Model Extraction",prompt_injection:"Prompt Injection"};
 
 /* ═══════════════════════════════════
    SIDEBAR
    ═══════════════════════════════════ */
-function Sidebar({page,setPage,project,projects,setProject,setShowNew,ac}){
-  const nav=[
-    {id:"dashboard",l:"Dashboard",I:LayoutDashboard},
-    {id:"pipeline",l:"Secure Pipeline",I:Layers},
-    {id:"attacks",l:"Run Attacks",I:ShieldAlert},
-    {id:"atlas",l:"ATLAS Intel",I:Target},
-    {id:"results",l:"Results & Reports",I:FileText},
-    {id:"monitoring",l:"Monitoring",I:Activity},
-    {id:"users",l:"Users",I:Users},
-    {id:"knowledge",l:"Knowledge Base",I:BookOpen},
-    {id:"alerts",l:"Alerts",I:Bell,b:ac},
-    {id:"settings",l:"Settings",I:Settings},
-  ];
-  return(
-    <aside className="w-[220px] shrink-0 h-screen flex flex-col border-r border-white/[0.06] bg-white/[0.02]">
-      <div className="p-4 border-b border-white/[0.06]">
-        <div className="flex items-center gap-3 mb-4">
-          <img src="/logo.png" alt="BBAP-Sec" className="w-9 h-9 rounded-md object-cover" onError={e=>{e.target.style.display='none';e.target.nextSibling.style.display='flex';}}/>
-          <div className="w-9 h-9 rounded-md bg-gradient-to-br from-emerald-600 to-emerald-400 items-center justify-center font-mono text-xs font-bold text-white hidden">B</div>
-          <div><div className="text-sm font-semibold text-white">BBAP-Sec</div><div className="text-[9px] text-white/30 uppercase tracking-[0.2em]">AI Security</div></div>
+function Sidebar({ page, setPage, engagement }) {
+  const layers = Object.entries(LAYER_META);
+  const findingsCount = MOCK_FINDINGS.filter(f => f.status === "open").length;
+
+  const Section = ({ label, children }) => (
+    <div className="mb-1">
+      <div className="px-4 pt-3 pb-1 text-[8px] font-semibold tracking-[0.2em] uppercase text-white/15">{label}</div>
+      {children}
+    </div>
+  );
+
+  const NavBtn = ({ id, icon: Icon, label, badge, color }) => (
+    <button onClick={() => setPage(id)} className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[11px] font-medium transition-all ${page === id ? "bg-emerald-500/12 text-emerald-400 border border-emerald-500/20" : "text-white/45 hover:text-white/75 hover:bg-white/[0.03] border border-transparent"}`}>
+      <Icon size={14} strokeWidth={1.8} style={color ? { color } : undefined} />
+      <span className="flex-1 text-left">{label}</span>
+      {badge > 0 && <span className="text-[8px] font-mono bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">{badge}</span>}
+    </button>
+  );
+
+  return (
+    <aside className="w-[210px] shrink-0 h-screen flex flex-col border-r border-white/[0.06] bg-white/[0.015]">
+      {/* Brand */}
+      <div className="p-3.5 border-b border-white/[0.06]">
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="w-8 h-8 rounded-md bg-gradient-to-br from-emerald-600 to-emerald-400 flex items-center justify-center font-mono text-[10px] font-bold text-white">B</div>
+          <div><div className="text-[12px] font-semibold text-white">BBAP-Sec</div><div className="text-[8px] text-white/25 uppercase tracking-[0.2em]">AI Pentest Platform</div></div>
         </div>
-        <div className="text-[9px] text-white/25 uppercase tracking-widest mb-1.5">Project</div>
-        <select value={project?.id||""} onChange={e=>{const p=projects.find(x=>x.id===+e.target.value);if(p)setProject(p);}} className="w-full px-2 py-1.5 rounded-md bg-black/30 border border-white/[0.08] text-white/70 text-[11px] font-mono focus:outline-none focus:border-emerald-500/30">
-          {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <button onClick={()=>setShowNew(true)} className="w-full mt-1.5 flex items-center justify-center gap-1.5 px-2 py-1 rounded-md border border-dashed border-white/[0.08] text-[10px] text-white/30 hover:text-white/50 hover:border-white/[0.15] transition-colors"><Plus size={10}/>New Project</button>
+        <div className="text-[8px] text-white/20 uppercase tracking-widest mb-1">Engagement</div>
+        <div className={`px-2.5 py-1.5 rounded-md ${G} text-[10px] font-mono text-emerald-400/80`}>
+          {engagement.name}
+        </div>
+        <div className="flex items-center gap-1.5 mt-1.5">
+          <div className={`w-1.5 h-1.5 rounded-full ${engagement.status === "active" ? "bg-emerald-400" : "bg-white/20"}`} />
+          <span className="text-[9px] text-white/25">{engagement.target_type.replace("_"," ")}</span>
+        </div>
       </div>
-      <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">
-        {nav.map(n=>(
-          <button key={n.id} onClick={()=>setPage(n.id)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-[12px] font-medium transition-all ${page===n.id?"bg-emerald-500/12 text-emerald-400 border border-emerald-500/20":"text-white/50 hover:text-white/80 hover:bg-white/[0.04] border border-transparent"}`}>
-            <n.I size={15} strokeWidth={1.8}/><span className="flex-1 text-left">{n.l}</span>
-            {n.b>0&&<span className="text-[9px] font-mono bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">{n.b}</span>}
-          </button>
-        ))}
+
+      <nav className="flex-1 py-1.5 px-2 overflow-y-auto">
+        <NavBtn id="overview" icon={Activity} label="Overview" />
+        <NavBtn id="target" icon={Unplug} label="Target Setup" />
+
+        <Section label="Attack surfaces">
+          {layers.map(([key, m]) => {
+            const Icon = m.icon;
+            return <NavBtn key={key} id={`layer_${key}`} icon={Icon} label={m.label} color={m.color} />;
+          })}
+        </Section>
+
+        <Section label="Assessment">
+          <NavBtn id="findings" icon={Bug} label="Findings" badge={findingsCount} />
+          <NavBtn id="pipeline_checks" icon={Layers} label="Pipeline" />
+          <NavBtn id="atlas" icon={Target} label="ATLAS Intel" />
+          <NavBtn id="report" icon={BarChart3} label="Report Generator" />
+        </Section>
+
+        <Section label="AI risk management">
+          <NavBtn id="governance" icon={ShieldCheck} label="Governance" />
+          <NavBtn id="monitoring" icon={Gauge} label="Monitoring" />
+        </Section>
+
+        <Section label="Management">
+          <NavBtn id="team" icon={Users} label="Team" />
+          <NavBtn id="knowledge" icon={BookOpen} label="Knowledge Base" />
+          <NavBtn id="alerts" icon={Bell} label="Alerts" />
+          <NavBtn id="settings" icon={Settings} label="Settings" />
+        </Section>
       </nav>
     </aside>
   );
 }
 
 /* ═══════════════════════════════════
-   NEW PROJECT MODAL
+   OVERVIEW PAGE
    ═══════════════════════════════════ */
-function NewProjectModal({onClose,onCreated}){
-  const[f,sF]=useState({name:"",description:"",dataset:"mnist",architecture:"simple_cnn"});
-  const[sv,sSv]=useState(false);
-  const go=async()=>{if(!f.name.trim())return;sSv(true);await api.post("/projects",f);sSv(false);onCreated();onClose();};
-  return(
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
-      <div className={`${GS} rounded-lg p-6 w-full max-w-md`}>
-        <h3 className="text-sm font-semibold text-white mb-4">Create New Project</h3>
-        <div className="space-y-3">
-          <div><label className="text-[10px] text-white/40 block mb-1">Project Name</label><input value={f.name} onChange={e=>sF({...f,name:e.target.value})} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/80 text-[12px] font-mono focus:outline-none focus:border-emerald-500/30" placeholder="e.g. Production Fraud Model"/></div>
-          <div><label className="text-[10px] text-white/40 block mb-1">Description</label><input value={f.description} onChange={e=>sF({...f,description:e.target.value})} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[12px] focus:outline-none focus:border-emerald-500/30"/></div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-[10px] text-white/40 block mb-1">Dataset</label><select value={f.dataset} onChange={e=>sF({...f,dataset:e.target.value})} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/70 text-[12px] focus:outline-none"><option value="mnist">MNIST</option><option value="cifar10">CIFAR-10</option></select></div>
-            <div><label className="text-[10px] text-white/40 block mb-1">Architecture</label><select value={f.architecture} onChange={e=>sF({...f,architecture:e.target.value})} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/70 text-[12px] focus:outline-none"><option value="simple_cnn">Simple CNN</option></select></div>
+function OverviewPage({ engagement }) {
+  const layers = Object.entries(LAYER_META);
+  const findingsByLayer = {};
+  MOCK_FINDINGS.forEach(f => {
+    findingsByLayer[f.layer] = (findingsByLayer[f.layer] || 0) + 1;
+  });
+  const critCount = MOCK_FINDINGS.filter(f => f.severity === "critical").length;
+  const highCount = MOCK_FINDINGS.filter(f => f.severity === "high").length;
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-xl font-semibold text-white mb-0.5">Engagement Overview</h1>
+        <p className="text-sm text-white/35">{engagement.name} — {engagement.target_type.replace("_"," ")}</p>
+      </div>
+
+      {/* Top stats */}
+      <div className="grid grid-cols-5 gap-3">
+        {[
+          { l: "Risk Score", v: engagement.risk_score + "/100", c: "text-amber-400", bg: "bg-amber-500/10", I: ShieldAlert },
+          { l: "Findings", v: MOCK_FINDINGS.length, c: "text-orange-400", bg: "bg-orange-500/10", I: Bug },
+          { l: "Critical", v: critCount, c: critCount > 0 ? "text-red-400" : "text-emerald-400", bg: critCount > 0 ? "bg-red-500/10" : "bg-emerald-500/10", I: AlertTriangle },
+          { l: "High", v: highCount, c: "text-orange-300", bg: "bg-orange-500/10", I: FileWarning },
+          { l: "Layers Tested", v: `${new Set(MOCK_FINDINGS.map(f=>f.layer)).size}/6`, c: "text-blue-400", bg: "bg-blue-500/10", I: Layers },
+        ].map(x => (
+          <div key={x.l} className={`${G} rounded-lg p-3.5`}>
+            <div className={`w-7 h-7 rounded-md ${x.bg} flex items-center justify-center mb-2`}><x.I size={14} className={x.c} /></div>
+            <div className={`text-xl font-semibold font-mono ${x.c}`}>{x.v}</div>
+            <div className="text-[10px] text-white/35 mt-0.5">{x.l}</div>
           </div>
+        ))}
+      </div>
+
+      {/* Attack Surface Health */}
+      <div>
+        <div className="text-[10px] font-semibold text-white/25 uppercase tracking-widest mb-3">Attack surface health</div>
+        <div className="grid grid-cols-3 gap-3">
+          {layers.map(([key, m]) => {
+            const Icon = m.icon;
+            const count = findingsByLayer[key] || 0;
+            const inScope = engagement.scope?.includes(key);
+            return (
+              <div key={key} className={`${G} rounded-lg p-4 ${!inScope ? "opacity-30" : ""}`}>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className={`w-8 h-8 rounded-lg ${m.bg} border ${m.bd} flex items-center justify-center`}>
+                    <Icon size={15} style={{ color: m.color }} />
+                  </div>
+                  <div className="flex-1">
+                    <div className={`text-[12px] font-medium`} style={{ color: m.color }}>{m.label}</div>
+                    <div className="text-[10px] text-white/30">{inScope ? `${count} findings` : "Out of scope"}</div>
+                  </div>
+                  {count > 0 && (
+                    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${count > 2 ? "bg-red-500/10 text-red-400 border border-red-500/20" : "bg-amber-500/10 text-amber-400 border border-amber-500/20"}`}>
+                      {count}
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-1 flex-wrap">
+                  {LAYER_ATTACKS[key]?.slice(0, 3).map(a => (
+                    <span key={a.id} className="text-[8px] font-mono text-white/20 bg-white/[0.03] px-1.5 py-0.5 rounded">{a.name}</span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <div className="flex gap-2 mt-5">
-          <button onClick={go} disabled={sv||!f.name.trim()} className="px-4 py-2 rounded-md bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-500 disabled:opacity-40">{sv?"Creating...":"Create Project"}</button>
-          <button onClick={onClose} className="px-4 py-2 rounded-md bg-white/[0.06] text-white/50 text-[11px]">Cancel</button>
+      </div>
+
+      {/* Recent critical findings */}
+      <div>
+        <div className="text-[10px] font-semibold text-white/25 uppercase tracking-widest mb-3">Critical & high findings</div>
+        <div className="space-y-2">
+          {MOCK_FINDINGS.filter(f => f.severity === "critical" || f.severity === "high").map(f => {
+            const lm = LAYER_META[f.layer];
+            const sv = SEV[f.severity];
+            return (
+              <div key={f.id} className={`${G} rounded-lg px-4 py-3 flex items-center gap-3`}>
+                <div className={`w-2 h-2 rounded-full ${sv.dot}`} />
+                <span className="text-[9px] font-mono text-white/25 w-12">{f.id}</span>
+                <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${lm.bg} border ${lm.bd}`} style={{ color: lm.color }}>{lm.label}</span>
+                <span className="text-[11px] text-white/65 flex-1">{f.title}</span>
+                <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${sv.bg} ${sv.tx} border ${sv.bd}`}>{f.severity}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -114,7 +278,363 @@ function NewProjectModal({onClose,onCreated}){
 }
 
 /* ═══════════════════════════════════
-   OVERLAY (shared for ATLAS detail)
+   TARGET SETUP PAGE
+   ═══════════════════════════════════ */
+function TargetPage() {
+  const [method, setMethod] = useState("api_endpoint");
+  const methods = [
+    { id: "api_endpoint", label: "API Endpoint", icon: Globe, desc: "Test a deployed model via its REST API", fields: ["URL","Auth headers","Response format"] },
+    { id: "model_upload", label: "Model Upload", icon: Upload, desc: "Upload .pt/.onnx/.h5 into isolated sandbox", fields: ["Model file","Framework","Input shape"], sandbox: true },
+    { id: "registry",     label: "Registry",     icon: Database, desc: "Pull from MLflow, HuggingFace, S3", fields: ["Registry URL","Model ID","Credentials"], sandbox: true },
+    { id: "llm_endpoint", label: "LLM Endpoint", icon: MessageSquare, desc: "Test LLM apps via API (OpenAI, Anthropic)", fields: ["Provider","API key","Model name"] },
+  ];
+  const sel = methods.find(m => m.id === method);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-xl font-semibold text-white mb-0.5">Target Setup</h1>
+        <p className="text-sm text-white/35">Configure how to reach the AI system under test</p>
+      </div>
+
+      {/* Method selector */}
+      <div className="grid grid-cols-4 gap-3">
+        {methods.map(m => (
+          <button key={m.id} onClick={() => setMethod(m.id)} className={`${G} rounded-lg p-4 text-left transition-all ${method === m.id ? "border-emerald-500/30 bg-emerald-500/[0.04]" : "hover:border-white/[0.12]"}`}>
+            <m.icon size={18} className={method === m.id ? "text-emerald-400" : "text-white/30"} />
+            <div className={`text-[12px] font-medium mt-2 ${method === m.id ? "text-emerald-400" : "text-white/70"}`}>{m.label}</div>
+            <div className="text-[10px] text-white/30 mt-1">{m.desc}</div>
+            {m.sandbox && <span className="inline-block mt-2 text-[8px] font-mono text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded border border-violet-500/20">Sandbox</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* Config form */}
+      <div className={`${G} rounded-lg p-5`}>
+        <h3 className="text-sm font-medium text-emerald-400 mb-4">{sel.label} — Configuration</h3>
+        <div className="grid grid-cols-2 gap-4">
+          {sel.fields.map(f => (
+            <div key={f}>
+              <label className="text-[10px] text-white/35 block mb-1">{f}</label>
+              {f === "Model file" ? (
+                <div className="flex items-center gap-2 px-3 py-3 rounded-md bg-black/30 border border-dashed border-white/[0.1] cursor-pointer hover:border-emerald-500/30 transition-colors">
+                  <Upload size={14} className="text-white/25" />
+                  <span className="text-[11px] text-white/30">Drop file or click to browse</span>
+                </div>
+              ) : f === "Framework" ? (
+                <select className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] focus:outline-none focus:border-emerald-500/30">
+                  <option>PyTorch (.pt, .pth)</option><option>ONNX (.onnx)</option><option>TensorFlow (.h5, .pb)</option><option>scikit-learn (.pkl)</option><option>SafeTensors (.safetensors)</option>
+                </select>
+              ) : f === "Provider" ? (
+                <select className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] focus:outline-none focus:border-emerald-500/30">
+                  <option>Anthropic (Claude)</option><option>OpenAI (GPT)</option><option>Azure OpenAI</option><option>Self-hosted (Ollama, vLLM)</option><option>Custom endpoint</option>
+                </select>
+              ) : (
+                <input className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] font-mono focus:outline-none focus:border-emerald-500/30" placeholder={f === "URL" ? "https://api.target.com/v2/predict" : f === "API key" ? "sk-••••••••••••" : ""} />
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-3 mt-5">
+          <button className="px-5 py-2 rounded-md bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-500 flex items-center gap-2">
+            {sel.sandbox ? <><Box size={13} />Create Sandbox &amp; Connect</> : <><Zap size={13} />Test Connection</>}
+          </button>
+          <span className="text-[10px] text-white/20">Validates endpoint is reachable before saving</span>
+        </div>
+      </div>
+
+      {/* Sandbox status (if applicable) */}
+      {sel.sandbox && (
+        <div className={`${G} rounded-lg p-5`}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-violet-400 flex items-center gap-2"><Server size={14} />Active Sandbox</h3>
+            <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">running</span>
+          </div>
+          <div className="grid grid-cols-4 gap-4">
+            {[
+              { l: "Container", v: MOCK_SANDBOX.container_id || "bbap-sbx-001" },
+              { l: "Framework", v: MOCK_SANDBOX.framework },
+              { l: "Port", v: `:${MOCK_SANDBOX.port}` },
+              { l: "GPU", v: MOCK_SANDBOX.gpu ? "Enabled" : "CPU only" },
+            ].map(x => (
+              <div key={x.l}>
+                <div className="text-[9px] text-white/25 uppercase tracking-wider">{x.l}</div>
+                <div className="text-[11px] font-mono text-white/60 mt-0.5">{x.v}</div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex items-center gap-2 text-[10px] text-white/20">
+            <Radio size={10} className="text-emerald-400 animate-pulse" />
+            <span>Uptime: {MOCK_SANDBOX.uptime} — Network isolated — {MOCK_SANDBOX.filename}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Scope selection */}
+      <div className={`${G} rounded-lg p-5`}>
+        <h3 className="text-sm font-medium text-white/70 mb-3">Attack Surface Scope</h3>
+        <p className="text-[10px] text-white/25 mb-3">Select which layers to include in this engagement. Grayed-out attacks require a different access method.</p>
+        <div className="grid grid-cols-3 gap-2">
+          {Object.entries(LAYER_META).map(([key, m]) => {
+            const Icon = m.icon;
+            const attacks = LAYER_ATTACKS[key];
+            const available = attacks.filter(a => a.access.includes(method === "api_endpoint" ? "api" : method === "model_upload" ? "upload" : method === "registry" ? "registry" : "llm"));
+            return (
+              <label key={key} className={`flex items-center gap-3 px-3 py-2.5 rounded-md bg-white/[0.02] hover:bg-white/[0.04] cursor-pointer transition-colors ${available.length === 0 ? "opacity-25 pointer-events-none" : ""}`}>
+                <input type="checkbox" defaultChecked={available.length > 0} className="rounded border-white/20 bg-black/30" />
+                <Icon size={14} style={{ color: m.color }} />
+                <div className="flex-1">
+                  <span className="text-[11px] text-white/65">{m.label}</span>
+                  <span className="text-[9px] text-white/25 ml-2">{available.length}/{attacks.length} attacks</span>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════
+   ATTACK LAYER PAGE (reusable)
+   ═══════════════════════════════════ */
+function LayerPage({ layerKey }) {
+  const meta = LAYER_META[layerKey];
+  const attacks = LAYER_ATTACKS[layerKey] || [];
+  const findings = MOCK_FINDINGS.filter(f => f.layer === layerKey);
+  const [sel, setSel] = useState(null);
+  const Icon = meta.icon;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-3">
+        <div className={`w-10 h-10 rounded-lg ${meta.bg} border ${meta.bd} flex items-center justify-center`}>
+          <Icon size={20} style={{ color: meta.color }} />
+        </div>
+        <div>
+          <h1 className="text-xl font-semibold text-white">{meta.label}</h1>
+          <p className="text-sm text-white/35">{attacks.length} attacks available — {findings.length} findings</p>
+        </div>
+      </div>
+
+      {/* Attack catalog */}
+      <div>
+        <div className="text-[10px] font-semibold text-white/25 uppercase tracking-widest mb-3">Available attacks</div>
+        <div className="grid grid-cols-2 gap-2">
+          {attacks.map(a => (
+            <button key={a.id} onClick={() => setSel(a)} className={`${G} rounded-lg p-4 text-left transition-all hover:border-white/[0.12] ${sel?.id === a.id ? "border-emerald-500/30 bg-emerald-500/[0.03]" : ""}`}>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[12px] font-medium text-white/80">{a.name}</span>
+                <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded ${a.difficulty === "Beginner" ? "bg-emerald-500/10 text-emerald-400" : a.difficulty === "Intermediate" ? "bg-amber-500/10 text-amber-400" : a.difficulty === "Advanced" ? "bg-orange-500/10 text-orange-400" : "bg-red-500/10 text-red-400"}`}>{a.difficulty}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {a.atlas && <span className="text-[9px] font-mono text-orange-300/60">{a.atlas}</span>}
+                <div className="flex gap-1">
+                  {a.access.map(ac => (
+                    <span key={ac} className="text-[8px] font-mono text-white/20 bg-white/[0.03] px-1 py-0.5 rounded">{ac}</span>
+                  ))}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Run panel */}
+      {sel && (
+        <div className={`${G} rounded-lg p-5`}>
+          <h3 className="text-sm font-medium mb-3" style={{ color: meta.color }}>Run: {sel.name}</h3>
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <div><label className="text-[10px] text-white/35 block mb-1">Target</label><div className="px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-[11px] text-white/40 font-mono">{MOCK_ENGAGEMENT.name}</div></div>
+            {layerKey === "inference" && sel.id.startsWith("fgsm") && (
+              <div><label className="text-[10px] text-white/35 block mb-1">Epsilon (ε)</label><input type="number" defaultValue={0.03} step={0.01} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] font-mono focus:outline-none focus:border-emerald-500/30" /></div>
+            )}
+            {layerKey === "training" && (
+              <div><label className="text-[10px] text-white/35 block mb-1">Poison rate</label><input type="number" defaultValue={0.1} step={0.05} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] font-mono focus:outline-none focus:border-emerald-500/30" /></div>
+            )}
+            {layerKey === "artifacts" && (
+              <div><label className="text-[10px] text-white/35 block mb-1">Max queries</label><input type="number" defaultValue={1000} step={100} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] font-mono focus:outline-none focus:border-emerald-500/30" /></div>
+            )}
+          </div>
+          <button className="px-5 py-2 rounded-md bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-500 flex items-center gap-2"><Play size={13} />Execute Attack</button>
+        </div>
+      )}
+
+      {/* Layer findings */}
+      {findings.length > 0 && (
+        <div>
+          <div className="text-[10px] font-semibold text-white/25 uppercase tracking-widest mb-3">Findings in this layer</div>
+          <div className="space-y-2">
+            {findings.map(f => {
+              const sv = SEV[f.severity];
+              return (
+                <div key={f.id} className={`${G} rounded-lg px-4 py-3`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${sv.dot}`} />
+                    <span className="text-[9px] font-mono text-white/25 w-10">{f.id}</span>
+                    <span className="text-[11px] text-white/70 flex-1">{f.title}</span>
+                    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${sv.bg} ${sv.tx} border ${sv.bd}`}>{f.severity}</span>
+                    {f.related.length > 0 && (
+                      <span className="text-[8px] font-mono text-white/20 flex items-center gap-1"><Network size={10} />{f.related.length} linked</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════
+   FINDINGS PAGE
+   ═══════════════════════════════════ */
+function FindingsPage() {
+  const [filter, setFilter] = useState("all");
+  const filtered = filter === "all" ? MOCK_FINDINGS : MOCK_FINDINGS.filter(f => f.layer === filter);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-white mb-0.5">Findings</h1>
+          <p className="text-sm text-white/35">{MOCK_FINDINGS.length} findings across {new Set(MOCK_FINDINGS.map(f=>f.layer)).size} layers</p>
+        </div>
+        <button className="flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 text-[11px] font-medium hover:bg-emerald-600/30"><Download size={13} />Export Findings</button>
+      </div>
+
+      {/* Layer filter */}
+      <div className="flex gap-1.5 flex-wrap">
+        <button onClick={() => setFilter("all")} className={`px-3 py-1.5 rounded-md text-[10px] font-medium transition-all ${filter === "all" ? "bg-emerald-500/12 text-emerald-400 border border-emerald-500/20" : `${G} text-white/40 hover:text-white/60`}`}>All ({MOCK_FINDINGS.length})</button>
+        {Object.entries(LAYER_META).map(([key, m]) => {
+          const count = MOCK_FINDINGS.filter(f => f.layer === key).length;
+          if (count === 0) return null;
+          return (
+            <button key={key} onClick={() => setFilter(key)} className={`px-3 py-1.5 rounded-md text-[10px] font-medium transition-all ${filter === key ? `${m.bg} border ${m.bd}` : `${G} text-white/40 hover:text-white/60`}`} style={filter === key ? { color: m.color } : undefined}>
+              {m.label} ({count})
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Findings list with connections */}
+      <div className="space-y-2">
+        {filtered.map(f => {
+          const lm = LAYER_META[f.layer];
+          const sv = SEV[f.severity];
+          const relatedFindings = MOCK_FINDINGS.filter(r => f.related.includes(r.id));
+          return (
+            <div key={f.id} className={`${G} rounded-lg`}>
+              <div className="px-5 py-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className={`w-2 h-2 rounded-full ${sv.dot}`} />
+                  <span className="text-[9px] font-mono text-white/25">{f.id}</span>
+                  <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${lm.bg} border ${lm.bd}`} style={{ color: lm.color }}>{lm.label}</span>
+                  <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${sv.bg} ${sv.tx} border ${sv.bd}`}>{f.severity}</span>
+                  {f.atlas && <span className="text-[9px] font-mono text-orange-300/50">{f.atlas}</span>}
+                  <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ml-auto ${f.status === "open" ? "bg-red-500/10 text-red-400" : f.status === "in_progress" ? "bg-amber-500/10 text-amber-400" : "bg-emerald-500/10 text-emerald-400"}`}>{f.status}</span>
+                </div>
+                <div className="text-[12px] text-white/75 mb-2">{f.title}</div>
+                <div className="flex gap-3 flex-wrap">
+                  {Object.entries(f.metrics).map(([k, v]) => (
+                    <span key={k} className="text-[9px] font-mono bg-white/[0.03] text-white/35 px-2 py-0.5 rounded">{k}: {typeof v === 'number' ? (v % 1 === 0 ? v : v.toFixed(1)) : v}</span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Related findings */}
+              {relatedFindings.length > 0 && (
+                <div className="px-5 py-2.5 border-t border-white/[0.04] bg-white/[0.01]">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Network size={10} className="text-white/20" />
+                    <span className="text-[9px] text-white/20 uppercase tracking-wider">Connected findings</span>
+                  </div>
+                  {relatedFindings.map(r => {
+                    const rlm = LAYER_META[r.layer];
+                    return (
+                      <div key={r.id} className="flex items-center gap-2 ml-3 py-1">
+                        <ArrowRight size={10} className="text-white/10" />
+                        <span className="text-[9px] font-mono text-white/25">{r.id}</span>
+                        <span className="text-[9px]" style={{ color: rlm.color }}>{rlm.label}</span>
+                        <span className="text-[10px] text-white/40">{r.title}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════
+   REPORT GENERATOR PAGE
+   ═══════════════════════════════════ */
+function ReportPage() {
+  const sections = [
+    { name: "Executive Summary", desc: "Risk score, key findings, target overview", auto: true },
+    { name: "Training Phase", desc: `${MOCK_FINDINGS.filter(f=>f.layer==="training").length} findings`, auto: true },
+    { name: "Inference Phase", desc: `${MOCK_FINDINGS.filter(f=>f.layer==="inference").length} findings`, auto: true },
+    { name: "Model Artifacts", desc: `${MOCK_FINDINGS.filter(f=>f.layer==="artifacts").length} findings`, auto: true },
+    { name: "Data Pipeline", desc: `${MOCK_FINDINGS.filter(f=>f.layer==="pipeline").length} findings`, auto: true },
+    { name: "Infrastructure", desc: `${MOCK_FINDINGS.filter(f=>f.layer==="infra").length} findings`, auto: true },
+    { name: "Output Layer", desc: `${MOCK_FINDINGS.filter(f=>f.layer==="output").length} findings`, auto: true },
+    { name: "Cross-Layer Analysis", desc: "Attack chains and finding relationships", auto: true },
+    { name: "Pipeline Health", desc: "46 controls status", auto: true },
+    { name: "Compliance Mapping", desc: "NIST, ATLAS, OWASP, EU AI Act", auto: true },
+    { name: "Remediation Roadmap", desc: "Prioritized action plan", auto: true },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-white mb-0.5">Report Generator</h1>
+          <p className="text-sm text-white/35">Pulls findings from all 6 layers into a comprehensive report</p>
+        </div>
+        <div className="flex gap-2">
+          <button className="flex items-center gap-2 px-4 py-2 rounded-md bg-white/[0.04] text-white/50 text-[11px] hover:bg-white/[0.08] border border-white/[0.06]"><FileText size={13} />Export PDF</button>
+          <button className="flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-500"><Download size={13} />Export JSON</button>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {sections.map((s, i) => (
+          <div key={i} className={`${G} rounded-lg px-5 py-3.5 flex items-center gap-4`}>
+            <div className="w-6 h-6 rounded-md bg-emerald-500/10 flex items-center justify-center text-[10px] font-bold text-emerald-400 font-mono">{i + 1}</div>
+            <div className="flex-1">
+              <div className="text-[12px] font-medium text-white/80">{s.name}</div>
+              <div className="text-[10px] text-white/30">{s.desc}</div>
+            </div>
+            {s.auto && <CheckCircle2 size={14} className="text-emerald-500/50" />}
+            <span className="text-[9px] font-mono text-emerald-400/40">auto-populated</span>
+          </div>
+        ))}
+      </div>
+
+      <div className={`${G} rounded-lg p-5`}>
+        <div className="text-[10px] text-white/25 uppercase tracking-widest mb-3">Report preview</div>
+        <div className="font-mono text-[11px] text-white/40 space-y-1">
+          <div>Engagement: <span className="text-emerald-400">{MOCK_ENGAGEMENT.name}</span></div>
+          <div>Target: <span className="text-white/60">{MOCK_ENGAGEMENT.target_type.replace("_"," ")}</span></div>
+          <div>Findings: <span className="text-orange-400">{MOCK_FINDINGS.length}</span> ({MOCK_FINDINGS.filter(f=>f.severity==="critical").length} critical, {MOCK_FINDINGS.filter(f=>f.severity==="high").length} high)</div>
+          <div>Layers tested: <span className="text-white/60">{new Set(MOCK_FINDINGS.map(f=>f.layer)).size}/6</span></div>
+          <div>Risk score: <span className="text-amber-400">{MOCK_ENGAGEMENT.risk_score}/100 (medium)</span></div>
+          <div>Cross-layer connections: <span className="text-violet-400">{MOCK_FINDINGS.reduce((s,f) => s + f.related.length, 0)}</span></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════
+   OVERLAY (shared modal)
    ═══════════════════════════════════ */
 function Overlay({children,onClose}){
   return(
@@ -125,57 +645,7 @@ function Overlay({children,onClose}){
 }
 
 /* ═══════════════════════════════════
-   DASHBOARD
-   ═══════════════════════════════════ */
-function DashPage({stats,pipeline,alerts}){
-  return(<div className="space-y-5">
-    <div><h1 className="text-xl font-semibold text-white mb-1">Security Overview</h1><p className="text-sm text-white/40">Real-time project security posture</p></div>
-    <div className="grid grid-cols-4 gap-3">{[
-      {l:"Pipeline Health",v:`${stats.pipeline_health}%`,s:`${stats.passed_checks}/${stats.total_checks}`,c:"text-emerald-400",bg:"bg-emerald-500/10",I:ShieldCheck},
-      {l:"Active Alerts",v:stats.active_alerts,s:`${stats.total_alerts} total`,c:stats.active_alerts>0?"text-red-400":"text-emerald-400",bg:stats.active_alerts>0?"bg-red-500/10":"bg-emerald-500/10",I:AlertTriangle},
-      {l:"Attack Results",v:stats.total_results,s:"tests run",c:"text-amber-400",bg:"bg-amber-500/10",I:Shield},
-      {l:"Active Users",v:stats.active_users,s:"accounts",c:"text-blue-400",bg:"bg-blue-500/10",I:Users},
-    ].map(x=><div key={x.l} className={`${G} rounded-lg p-4`}><div className={`w-8 h-8 rounded-md ${x.bg} flex items-center justify-center mb-3`}><x.I size={15} className={x.c}/></div><div className={`text-2xl font-semibold ${x.c}`}>{x.v}</div><div className="text-[11px] text-white/40">{x.l}</div><div className="text-[10px] text-white/25 font-mono mt-0.5">{x.s}</div></div>)}</div>
-    <div className="grid grid-cols-3 gap-3">
-      <div className={`${G} rounded-lg p-5 col-span-2`}><div className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-4">Pipeline Status</div>
-        <div className="flex items-center gap-2">{pipeline.map((st,i)=>{const S=STG.find(s=>s.k===st.stage);const pct=st.total>0?st.passed/st.total*100:0;const ok=pct===100;return(<div key={st.stage} className="flex items-center gap-2 flex-1"><div className={`flex-1 ${GS} rounded-md p-3`}><div className="flex items-center gap-2 mb-2">{S&&<S.I size={13} className={ok?"text-emerald-400":"text-amber-400"}/>}<span className="text-[10px] font-medium text-white/70">{S?.l||st.stage}</span></div><div className="flex items-center gap-2"><div className="flex-1 h-1 bg-white/[0.06] rounded-full overflow-hidden"><div className={`h-full rounded-full ${ok?"bg-emerald-500":"bg-amber-500"}`} style={{width:`${pct}%`}}/></div><span className="text-[9px] font-mono text-white/40">{st.passed}/{st.total}</span></div></div>{i<pipeline.length-1&&<ChevronRight size={12} className="text-white/15 shrink-0"/>}</div>);})}</div></div>
-      <div className={`${G} rounded-lg p-5`}><div className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Recent Alerts</div><div className="space-y-2">{alerts.slice(0,4).map(a=>{const s=SV[a.severity]||SV.medium;return(<div key={a.id} className={`${s.bg} border ${s.bd} rounded-md px-3 py-2`}><div className="flex items-center gap-2"><div className={`w-1.5 h-1.5 rounded-full ${s.dt}`}/><span className="text-[10px] text-white/70 flex-1 truncate">{a.title}</span></div><div className="text-[9px] text-white/30 font-mono mt-1">{a.source}</div></div>);})}{alerts.length===0&&<p className="text-[10px] text-white/25">No alerts</p>}</div></div>
-    </div>
-  </div>);
-}
-
-/* ═══════════════════════════════════
-   PIPELINE
-   ═══════════════════════════════════ */
-function PipelinePage({pipeline,refresh}){
-  const[exp,sExp]=useState(null);
-  const toggle=async id=>{await api.post(`/pipeline/check/${id}/toggle`);refresh();};
-  return(<div className="space-y-5"><div><h1 className="text-xl font-semibold text-white mb-1">Secure AI Pipeline</h1><p className="text-sm text-white/40">Click checks to toggle pass/fail</p></div>
-    <div className="space-y-3">{pipeline.map(st=>{const S=STG.find(s=>s.k===st.stage);const pct=st.total>0?Math.round(st.passed/st.total*100):0;const ok=pct===100;return(<div key={st.stage} className={`${G} rounded-lg overflow-hidden`}>
-      <button onClick={()=>sExp(exp===st.stage?null:st.stage)} className="w-full flex items-center gap-4 p-5 text-left hover:bg-white/[0.02] transition-colors"><div className={`w-10 h-10 rounded-lg flex items-center justify-center ${ok?"bg-emerald-500/10":"bg-amber-500/10"}`}>{S&&<S.I size={18} className={ok?"text-emerald-400":"text-amber-400"}/>}</div><div className="flex-1"><div className="text-sm font-medium text-white/90">{S?.l||st.stage}</div><div className="text-[11px] text-white/40">{st.passed}/{st.total} passed</div></div><div className="flex items-center gap-3"><div className="w-24 h-1.5 bg-white/[0.06] rounded-full overflow-hidden"><div className={`h-full rounded-full ${ok?"bg-emerald-500":"bg-amber-500"}`} style={{width:`${pct}%`}}/></div><span className={`text-[10px] font-mono px-2 py-0.5 rounded ${ok?"bg-emerald-500/10 text-emerald-400":"bg-amber-500/10 text-amber-400"}`}>{pct}%</span><ChevronDown size={14} className={`text-white/30 transition-transform ${exp===st.stage?"rotate-180":""}`}/></div></button>
-      {exp===st.stage&&<div className="px-5 pb-5 border-t border-white/[0.04]"><div className="grid grid-cols-3 gap-2 pt-4">{st.checks.map(ch=><button key={ch.id} onClick={()=>toggle(ch.id)} className={`flex items-center gap-2 px-3 py-2 rounded-md text-left transition-colors ${ch.passed?"bg-emerald-500/[0.05] hover:bg-emerald-500/[0.1]":"bg-red-500/[0.05] hover:bg-red-500/[0.1]"}`}>{ch.passed?<CheckCircle2 size={12} className="text-emerald-500/70"/>:<XCircle size={12} className="text-red-400/70"/>}<span className="text-[11px] text-white/60">{ch.check_name}</span></button>)}</div></div>}
-    </div>);})}</div></div>);
-}
-
-/* ═══════════════════════════════════
-   RUN ATTACKS
-   ═══════════════════════════════════ */
-function AttacksPage({pid,refresh}){
-  const[sel,sSel]=useState(null);const[pr,sPr]=useState({});const[run,sRun]=useState(false);const[res,sRes]=useState(null);
-  const pick=a=>{sSel(a);sRes(null);const d={};a.f.forEach(f=>{d[f.k]=f.d;});sPr(d);};
-  const go=async()=>{if(!sel||run)return;sRun(true);sRes(null);const r=await api.post(`/projects/${pid}/attack`,{attack_type:sel.id,params:pr});if(r.job_id){const iv=setInterval(async()=>{const s=await api.get(`/attack/status/${r.job_id}`);if(s.status==="completed"){clearInterval(iv);sRes(s.result);sRun(false);refresh();}else if(s.status==="failed"){clearInterval(iv);sRes({error:s.error});sRun(false);}},2000);}else{sRes(r);sRun(false);}};
-  return(<div className="space-y-5"><div><h1 className="text-xl font-semibold text-white mb-1">Run Attacks</h1><p className="text-sm text-white/40">Security tests against the selected project</p></div>
-    <div className="grid grid-cols-5 gap-3">{ATK.map(a=><div key={a.id} onClick={()=>a.link?window.location.href="/prompt-injection":pick(a)} className={`${G} rounded-lg p-4 cursor-pointer transition-all hover:border-white/[0.15] ${sel?.id===a.id?"border-emerald-500/30 bg-emerald-500/[0.04]":""}`}><span className="text-[9px] font-mono text-orange-300/70 bg-orange-500/10 px-2 py-0.5 rounded">{a.t}</span><div className="text-[12px] font-medium text-white/80 mt-2">{a.l}</div>{a.link&&<div className="text-[10px] text-white/30 mt-1">Open simulator</div>}</div>)}</div>
-    {sel&&!sel.link&&<div className={`${G} rounded-lg p-5`}><h3 className="text-sm font-medium text-emerald-400 mb-4">{sel.l} — Configure</h3>
-      <div className="grid grid-cols-3 gap-4">{sel.f.map(f=><div key={f.k}><label className="text-[10px] text-white/40 block mb-1">{f.l}</label>{f.ty==="select"?<select value={pr[f.k]||f.d} onChange={e=>sPr({...pr,[f.k]:e.target.value})} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/70 text-[12px] focus:outline-none focus:border-emerald-500/30">{f.o.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>:<input type="number" value={pr[f.k]||f.d} step={f.s} onChange={e=>sPr({...pr,[f.k]:+e.target.value})} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/70 text-[12px] font-mono focus:outline-none focus:border-emerald-500/30"/>}</div>)}</div>
-      <button onClick={go} disabled={run} className="mt-4 flex items-center gap-2 px-5 py-2 rounded-md bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-500 disabled:opacity-40">{run?<><Loader2 size={13} className="animate-spin"/>Running...</>:<><Play size={13}/>Run Attack</>}</button>
-      {res&&<div className={`mt-4 ${GS} rounded-md p-4`}><div className="text-[10px] text-white/30 uppercase tracking-widest mb-2">Result</div><pre className="text-[11px] text-emerald-400/80 font-mono whitespace-pre-wrap">{JSON.stringify(res,null,2)}</pre></div>}
-    </div>}
-  </div>);
-}
-
-/* ═══════════════════════════════════
-   ATLAS INTEL
+   ATLAS INTEL PAGE
    ═══════════════════════════════════ */
 function AtlasPage(){
   const[stats,sStats]=useState(null);
@@ -185,9 +655,9 @@ function AtlasPage(){
   const[detail,sDetail]=useState(null);
 
   useEffect(()=>{
-    atlas.get("/stats").then(sStats);
-    atlas.get("/coverage").then(sCov);
-    atlas.get("/tactics").then(sTactics);
+    atlas.get("/stats").then(sStats).catch(()=>{});
+    atlas.get("/coverage").then(sCov).catch(()=>{});
+    atlas.get("/tactics").then(sTactics).catch(()=>{});
   },[]);
 
   const doSearch=async()=>{if(!q.trim())return;const d=await atlas.get(`/search?q=${encodeURIComponent(q)}`);sSr(d);};
@@ -196,7 +666,8 @@ function AtlasPage(){
   const showCase=async id=>{const d=await atlas.get(`/case-study/${id}`);sDetail({type:"case",...d});};
 
   return(<div className="space-y-5">
-    <div><h1 className="text-xl font-semibold text-white mb-1">MITRE ATLAS Intelligence</h1><p className="text-sm text-white/40">AI/ML threat framework — techniques, mitigations, case studies</p></div>
+    <div><h1 className="text-xl font-semibold text-white mb-0.5">MITRE ATLAS Intelligence</h1>
+    <p className="text-sm text-white/35">AI/ML threat framework — techniques, mitigations, case studies</p></div>
 
     {/* Stats */}
     {stats&&<div className="grid grid-cols-5 gap-3">{[
@@ -205,55 +676,119 @@ function AtlasPage(){
       {l:"Techniques",v:stats.techniques_total,c:"text-orange-300"},
       {l:"Mitigations",v:stats.mitigations,c:"text-blue-400"},
       {l:"Case Studies",v:stats.case_studies,c:"text-white/70"},
-    ].map(x=><div key={x.l} className={`${G} rounded-lg p-4`}><div className="text-[10px] text-white/30 uppercase tracking-widest">{x.l}</div><div className={`text-xl font-semibold mt-1 ${x.c}`}>{x.v}</div></div>)}</div>}
+    ].map(x=><div key={x.l} className={`${G} rounded-lg p-4`}><div className="text-[10px] text-white/25 uppercase tracking-widest">{x.l}</div><div className={`text-xl font-semibold mt-1 ${x.c}`}>{x.v}</div></div>)}</div>}
 
     {/* Search */}
-    <div className="flex gap-2"><div className={`flex-1 flex items-center gap-2 px-3 py-2.5 rounded-md ${G}`}><Search size={14} className="text-white/25"/><input value={q} onChange={e=>sQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSearch()} placeholder="Search techniques, mitigations, case studies..." className="flex-1 bg-transparent text-[12px] text-white/70 focus:outline-none placeholder:text-white/20"/></div><button onClick={doSearch} className="px-4 py-2 rounded-md bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-500">Search</button></div>
+    <div className="flex gap-2">
+      <div className={`flex-1 flex items-center gap-2 px-3 py-2.5 rounded-md ${G}`}>
+        <Search size={14} className="text-white/25"/>
+        <input value={q} onChange={e=>sQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSearch()} placeholder="Search techniques, mitigations, case studies..." className="flex-1 bg-transparent text-[12px] text-white/70 focus:outline-none placeholder:text-white/20"/>
+      </div>
+      <button onClick={doSearch} className="px-4 py-2 rounded-md bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-500">Search</button>
+    </div>
+
     {sr&&<div className={`${G} rounded-lg p-4 space-y-3`}>
-      {sr.techniques?.length>0&&<div><div className="text-[10px] text-white/30 uppercase tracking-widest mb-2">Techniques ({sr.techniques.length})</div>{sr.techniques.slice(0,8).map(t=><div key={t.id} onClick={()=>showTech(t.id)} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-white/[0.04] cursor-pointer"><span className="text-[10px] font-mono text-orange-300 min-w-[90px]">{t.id}</span><span className="text-[11px] text-white/70">{t.name}</span></div>)}</div>}
-      {sr.case_studies?.length>0&&<div><div className="text-[10px] text-white/30 uppercase tracking-widest mb-2">Case Studies ({sr.case_studies.length})</div>{sr.case_studies.slice(0,5).map(c=><div key={c.id} onClick={()=>showCase(c.id)} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-white/[0.04] cursor-pointer"><span className="text-[10px] font-mono text-orange-300 min-w-[90px]">{c.id}</span><span className="text-[11px] text-white/70">{c.name}</span></div>)}</div>}
-      {sr.mitigations?.length>0&&<div><div className="text-[10px] text-white/30 uppercase tracking-widest mb-2">Mitigations ({sr.mitigations.length})</div>{sr.mitigations.slice(0,5).map(m=><div key={m.id} className="flex items-center gap-3 px-3 py-2"><span className="text-[10px] font-mono text-blue-400 min-w-[90px]">{m.id}</span><span className="text-[11px] text-white/70">{m.name}</span></div>)}</div>}
-      {!sr.techniques?.length&&!sr.case_studies?.length&&!sr.mitigations?.length&&<p className="text-[11px] text-white/30">No results found.</p>}
+      {sr.techniques?.length>0&&<div>
+        <div className="text-[10px] text-white/25 uppercase tracking-widest mb-2">Techniques ({sr.techniques.length})</div>
+        {sr.techniques.slice(0,8).map(t=><div key={t.id} onClick={()=>showTech(t.id)} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-white/[0.04] cursor-pointer"><span className="text-[10px] font-mono text-orange-300 min-w-[90px]">{t.id}</span><span className="text-[11px] text-white/70">{t.name}</span></div>)}
+      </div>}
+      {sr.case_studies?.length>0&&<div>
+        <div className="text-[10px] text-white/25 uppercase tracking-widest mb-2">Case Studies ({sr.case_studies.length})</div>
+        {sr.case_studies.slice(0,5).map(c=><div key={c.id} onClick={()=>showCase(c.id)} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-white/[0.04] cursor-pointer"><span className="text-[10px] font-mono text-orange-300 min-w-[90px]">{c.id}</span><span className="text-[11px] text-white/70">{c.name}</span></div>)}
+      </div>}
+      {sr.mitigations?.length>0&&<div>
+        <div className="text-[10px] text-white/25 uppercase tracking-widest mb-2">Mitigations ({sr.mitigations.length})</div>
+        {sr.mitigations.slice(0,5).map(m=><div key={m.id} className="flex items-center gap-3 px-3 py-2"><span className="text-[10px] font-mono text-blue-400 min-w-[90px]">{m.id}</span><span className="text-[11px] text-white/70">{m.name}</span></div>)}
+      </div>}
+      {!sr.techniques?.length&&!sr.case_studies?.length&&!sr.mitigations?.length&&<p className="text-[11px] text-white/25">No results found.</p>}
     </div>}
 
     {/* Module Mappings */}
-    <div><div className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Module Mappings</div>
-    <div className="flex gap-2 flex-wrap mb-3">{Object.entries(MOD_LABELS).map(([k,v])=><button key={k} onClick={()=>showMod(k)} className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-all ${modTab===k?`bg-emerald-500/12 text-emerald-400 border border-emerald-500/20`:`${G} text-white/50 hover:text-white/70`}`}>{v}</button>)}</div>
-    {mapping&&<div className={`${G} rounded-lg p-5`}>
-      <h3 className="text-sm font-medium text-emerald-400 mb-1">{mapping.name}</h3>
-      <p className="text-[11px] text-white/40 mb-4">{mapping.description}</p>
-      <div className="space-y-4">
-        <div><div className="text-[10px] text-white/30 uppercase tracking-widest mb-2">Techniques ({mapping.techniques?.length||0})</div>{mapping.techniques?.map(t=><div key={t.id} onClick={()=>showTech(t.id)} className="flex gap-3 px-3 py-2 rounded-md hover:bg-white/[0.04] cursor-pointer mb-1"><span className="text-[10px] font-mono text-orange-300 min-w-[100px] shrink-0">{t.id}</span><div className="flex-1"><div className="text-[11px] text-white/70 font-medium">{t.name}</div><div className="text-[10px] text-white/35 mt-0.5">{t.relevance}</div>{t.bbap_functions?.length>0&&<div className="text-[10px] text-emerald-400/60 font-mono mt-0.5">{t.bbap_functions.join(", ")}</div>}</div></div>)}</div>
-        <div><div className="text-[10px] text-white/30 uppercase tracking-widest mb-2">Mitigations ({mapping.mitigations?.length||0})</div>{mapping.mitigations?.map(m=><div key={m.id} className="flex gap-3 px-3 py-1.5"><span className="text-[10px] font-mono text-blue-400 min-w-[100px]">{m.id}</span><span className="text-[11px] text-white/60">{m.name}</span></div>)}</div>
-        <div><div className="text-[10px] text-white/30 uppercase tracking-widest mb-2">Case Studies ({mapping.case_studies?.length||0})</div>{mapping.case_studies?.map(c=><div key={c.id} onClick={()=>showCase(c.id)} className="flex gap-3 px-3 py-1.5 rounded-md hover:bg-white/[0.04] cursor-pointer"><span className="text-[10px] font-mono text-orange-300 min-w-[100px]">{c.id}</span><span className="text-[11px] text-white/60">{c.name}</span></div>)}</div>
+    <div>
+      <div className="text-[10px] font-semibold text-white/25 uppercase tracking-widest mb-3">Attack module → ATLAS mapping</div>
+      <div className="flex gap-2 flex-wrap mb-3">
+        {Object.entries(MOD_LABELS).map(([k,v])=><button key={k} onClick={()=>showMod(k)} className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-all ${modTab===k?"bg-emerald-500/12 text-emerald-400 border border-emerald-500/20":`${G} text-white/45 hover:text-white/70`}`}>{v}</button>)}
       </div>
-    </div>}</div>
 
-    {/* Coverage Matrix */}
-    {coverage&&tactics.length>0&&<div><div className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Tactic Coverage</div>
-    <div className={`${G} rounded-lg overflow-hidden`}>{tactics.map(t=>{const mods=coverage[t.name]||[];const has=mods.length>0;return(
-      <div key={t.id} className={`flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.04] last:border-b-0 ${has?"bg-emerald-500/[0.02]":""}`}>
-        <span className="text-[10px] font-mono text-orange-300/60 min-w-[90px]">{t.id}</span>
-        <span className="text-[11px] text-white/70 flex-1">{t.name}</span>
-        <div className="flex gap-1.5">{has?mods.map(m=><span key={m} className="text-[9px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400">{MOD_LABELS[m]||m}</span>):<span className="text-[9px] text-white/20">not covered</span>}</div>
-      </div>);})}</div></div>}
+      {mapping&&<div className={`${G} rounded-lg p-5`}>
+        <h3 className="text-sm font-medium text-emerald-400 mb-1">{mapping.name}</h3>
+        <p className="text-[11px] text-white/35 mb-4">{mapping.description}</p>
+        <div className="space-y-4">
+          <div>
+            <div className="text-[10px] text-white/25 uppercase tracking-widest mb-2">Techniques ({mapping.techniques?.length||0})</div>
+            {mapping.techniques?.map(t=><div key={t.id} onClick={()=>showTech(t.id)} className="flex gap-3 px-3 py-2 rounded-md hover:bg-white/[0.04] cursor-pointer mb-1">
+              <span className="text-[10px] font-mono text-orange-300 min-w-[100px] shrink-0">{t.id}</span>
+              <div className="flex-1">
+                <div className="text-[11px] text-white/70 font-medium">{t.name}</div>
+                <div className="text-[10px] text-white/30 mt-0.5">{t.relevance}</div>
+                {t.bbap_functions?.length>0&&<div className="text-[10px] text-emerald-400/50 font-mono mt-0.5">{t.bbap_functions.join(", ")}</div>}
+              </div>
+            </div>)}
+          </div>
+          <div>
+            <div className="text-[10px] text-white/25 uppercase tracking-widest mb-2">Mitigations ({mapping.mitigations?.length||0})</div>
+            {mapping.mitigations?.map(m=><div key={m.id} className="flex gap-3 px-3 py-1.5"><span className="text-[10px] font-mono text-blue-400 min-w-[100px]">{m.id}</span><span className="text-[11px] text-white/55">{m.name}</span></div>)}
+          </div>
+          <div>
+            <div className="text-[10px] text-white/25 uppercase tracking-widest mb-2">Case Studies ({mapping.case_studies?.length||0})</div>
+            {mapping.case_studies?.map(c=><div key={c.id} onClick={()=>showCase(c.id)} className="flex gap-3 px-3 py-1.5 rounded-md hover:bg-white/[0.04] cursor-pointer"><span className="text-[10px] font-mono text-orange-300 min-w-[100px]">{c.id}</span><span className="text-[11px] text-white/55">{c.name}</span></div>)}
+          </div>
+        </div>
+      </div>}
+    </div>
+
+    {/* Tactic Coverage Matrix */}
+    {coverage&&tactics.length>0&&<div>
+      <div className="text-[10px] font-semibold text-white/25 uppercase tracking-widest mb-3">Tactic coverage</div>
+      <div className={`${G} rounded-lg overflow-hidden`}>
+        {tactics.map(t=>{const mods=coverage[t.name]||[];const has=mods.length>0;return(
+          <div key={t.id} className={`flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.04] last:border-b-0 ${has?"bg-emerald-500/[0.02]":""}`}>
+            <span className="text-[10px] font-mono text-orange-300/60 min-w-[90px]">{t.id}</span>
+            <span className="text-[11px] text-white/65 flex-1">{t.name}</span>
+            <div className="flex gap-1.5">{has?mods.map(m=><span key={m} className="text-[8px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{MOD_LABELS[m]||m}</span>):<span className="text-[9px] text-white/15">not covered</span>}</div>
+          </div>
+        );})}
+      </div>
+    </div>}
 
     {/* Detail Overlay */}
     {detail&&<Overlay onClose={()=>sDetail(null)}>
       <div className="p-5">
         {detail.type==="tech"&&detail.technique&&<>
-          <div className="flex items-center gap-3 mb-4"><span className="text-[10px] font-mono text-orange-300 bg-orange-500/10 px-2 py-1 rounded">{detail.technique.id}</span><h3 className="text-sm font-semibold text-white">{detail.technique.name}</h3></div>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-[10px] font-mono text-orange-300 bg-orange-500/10 px-2 py-1 rounded">{detail.technique.id}</span>
+            <h3 className="text-sm font-semibold text-white">{detail.technique.name}</h3>
+          </div>
           <p className="text-[12px] text-white/50 leading-relaxed mb-4">{detail.technique.description?.slice(0,500)}{detail.technique.description?.length>500?"...":""}</p>
-          {detail.technique.tactics&&<div className="mb-3"><span className="text-[10px] text-white/30">Tactics: </span><span className="text-[10px] text-white/50">{detail.technique.tactics.join(", ")}</span></div>}
-          {detail.subtechniques?.length>0&&<div className="mb-3"><div className="text-[10px] text-white/30 mb-1">Sub-techniques ({detail.subtechniques.length})</div>{detail.subtechniques.map(s=><div key={s.id} className="text-[10px] text-white/50 ml-2 mb-0.5"><span className="text-orange-300/60 font-mono">{s.id}</span> {s.name}</div>)}</div>}
-          {detail.mitigations?.length>0&&<div className="mb-3"><div className="text-[10px] text-white/30 mb-1">Mitigations ({detail.mitigations.length})</div>{detail.mitigations.map(m=><div key={m.id} className="text-[10px] text-white/50 ml-2 mb-0.5"><span className="text-blue-400/60 font-mono">{m.id}</span> {m.name}</div>)}</div>}
+          {detail.technique.tactics&&<div className="mb-3"><span className="text-[10px] text-white/25">Tactics: </span><span className="text-[10px] text-white/45">{detail.technique.tactics.join(", ")}</span></div>}
+          {detail.subtechniques?.length>0&&<div className="mb-3">
+            <div className="text-[10px] text-white/25 mb-1">Sub-techniques ({detail.subtechniques.length})</div>
+            {detail.subtechniques.map(s=><div key={s.id} className="text-[10px] text-white/45 ml-2 mb-0.5"><span className="text-orange-300/50 font-mono">{s.id}</span> {s.name}</div>)}
+          </div>}
+          {detail.mitigations?.length>0&&<div className="mb-3">
+            <div className="text-[10px] text-white/25 mb-1">Mitigations ({detail.mitigations.length})</div>
+            {detail.mitigations.map(m=><div key={m.id} className="text-[10px] text-white/45 ml-2 mb-0.5"><span className="text-blue-400/50 font-mono">{m.id}</span> {m.name}</div>)}
+          </div>}
           <a href={`https://atlas.mitre.org/techniques/${detail.technique.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 mt-2 text-[11px] text-emerald-400 hover:underline"><ExternalLink size={11}/>View on atlas.mitre.org</a>
         </>}
         {detail.type==="case"&&detail.case_study&&<>
-          <div className="flex items-center gap-3 mb-4"><span className="text-[10px] font-mono text-orange-300 bg-orange-500/10 px-2 py-1 rounded">{detail.case_study.id}</span><h3 className="text-sm font-semibold text-white">{detail.case_study.name}</h3></div>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-[10px] font-mono text-orange-300 bg-orange-500/10 px-2 py-1 rounded">{detail.case_study.id}</span>
+            <h3 className="text-sm font-semibold text-white">{detail.case_study.name}</h3>
+          </div>
           <p className="text-[12px] text-white/50 leading-relaxed mb-4">{detail.case_study.summary}</p>
-          {detail.case_study["incident-date"]&&<div className="text-[10px] text-white/30 mb-3">Date: {detail.case_study["incident-date"]}</div>}
-          {detail.attack_chain?.length>0&&<div><div className="text-[10px] text-white/30 mb-2">Attack Chain ({detail.attack_chain.length} steps)</div>{detail.attack_chain.map((s,i)=><div key={i} className="flex gap-3 mb-3"><div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">{i+1}</div><div><div className="text-[9px] text-amber-400 uppercase tracking-wider">{s.tactic_name}</div><div onClick={()=>showTech(s.technique_id)} className="text-[11px] text-emerald-400 cursor-pointer hover:underline">{s.technique_id}: {s.technique_name}</div><div className="text-[10px] text-white/35 mt-0.5">{s.description?.slice(0,150)}</div></div></div>)}</div>}
+          {detail.case_study["incident-date"]&&<div className="text-[10px] text-white/25 mb-3">Date: {detail.case_study["incident-date"]}</div>}
+          {detail.attack_chain?.length>0&&<div>
+            <div className="text-[10px] text-white/25 mb-2">Attack chain ({detail.attack_chain.length} steps)</div>
+            {detail.attack_chain.map((s,i)=><div key={i} className="flex gap-3 mb-3">
+              <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">{i+1}</div>
+              <div>
+                <div className="text-[9px] text-amber-400 uppercase tracking-wider">{s.tactic_name}</div>
+                <div onClick={()=>showTech(s.technique_id)} className="text-[11px] text-emerald-400 cursor-pointer hover:underline">{s.technique_id}: {s.technique_name}</div>
+                <div className="text-[10px] text-white/30 mt-0.5">{s.description?.slice(0,150)}</div>
+              </div>
+            </div>)}
+          </div>}
           <a href={`https://atlas.mitre.org/studies/${detail.case_study.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 mt-2 text-[11px] text-emerald-400 hover:underline"><ExternalLink size={11}/>View on atlas.mitre.org</a>
         </>}
       </div>
@@ -262,164 +797,261 @@ function AtlasPage(){
 }
 
 /* ═══════════════════════════════════
-   RESULTS & REPORTS
+   GOVERNANCE / AI RISK MANAGEMENT
    ═══════════════════════════════════ */
-function ResultsPage({pid}){
-  const[results,sR]=useState([]);
-  const[expanded,sExp]=useState(null);
-  useEffect(()=>{api.get(`/projects/${pid}/results`).then(sR);},[pid]);
+function GovernancePage({ engagement }) {
+  const [activeTab, setActiveTab] = useState("rmf");
+  const [expandedRmf, setExpandedRmf] = useState(null);
 
-  const exportAll=()=>{
-    const report={project_id:pid,exported_at:new Date().toISOString(),total_tests:results.length,results};
-    const blob=new Blob([JSON.stringify(report,null,2)],{type:"application/json"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");a.href=url;a.download=`bbap-sec-report-${pid}-${Date.now()}.json`;a.click();URL.revokeObjectURL(url);
-  };
-  const exportOne=(r)=>{
-    const blob=new Blob([JSON.stringify(r,null,2)],{type:"application/json"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");a.href=url;a.download=`bbap-sec-${r.attack_type}-${r.id}.json`;a.click();URL.revokeObjectURL(url);
-  };
+  const RMF = [
+    { id:"govern", name:"GOVERN", color:"text-violet-400", bg:"bg-violet-500/10", bd:"border-violet-500/20", icon:Users, desc:"Policies, processes, and accountability",
+      subs:[{id:"GOVERN 1.1",n:"Legal/regulatory requirements documented",s:"partial"},{id:"GOVERN 1.2",n:"Trustworthy AI in policies",s:"met"},{id:"GOVERN 1.3",n:"Risk tolerance defined",s:"met"},{id:"GOVERN 1.6",n:"Policies transparent and documented",s:"partial"},{id:"GOVERN 1.7",n:"Supply chain risks managed",s:"met"},{id:"GOVERN 2.1",n:"Roles and responsibilities defined",s:"met"},{id:"GOVERN 2.2",n:"Personnel trained",s:"partial"}],
+      features:["User Management — Admin/analyst/viewer roles","Knowledge Base — Policy documentation","Audit Trail — Activity logging","Pipeline: Authentication — OAuth2/JWT","Pipeline: Supply Chain Audit"]},
+    { id:"map", name:"MAP", color:"text-cyan-400", bg:"bg-cyan-500/10", bd:"border-cyan-500/20", icon:Target, desc:"Identifying and contextualizing AI risks",
+      subs:[{id:"MAP 1.1",n:"Intended purposes documented",s:"met"},{id:"MAP 1.2",n:"Data sources documented",s:"met"},{id:"MAP 1.5",n:"Input data quality assessed",s:"met"},{id:"MAP 1.6",n:"Privacy risks identified",s:"met"},{id:"MAP 2.1",n:"AI risks categorized",s:"met"},{id:"MAP 3.1",n:"Benefits and costs assessed",s:"partial"},{id:"MAP 3.4",n:"Supply chain risks mapped",s:"met"}],
+      features:["Secure Pipeline — 46 controls across 5 stages","ATLAS Intel — 170 techniques, 16 tactics","Project Management — Per-project risk scoping","Pipeline: PII Scan","Pipeline: Source Auth & Provenance"]},
+    { id:"measure", name:"MEASURE", color:"text-emerald-400", bg:"bg-emerald-500/10", bd:"border-emerald-500/20", icon:BarChart3, desc:"Quantifying and benchmarking AI risks",
+      subs:[{id:"MEASURE 1.1",n:"Measurement approaches established",s:"met"},{id:"MEASURE 2.5",n:"Adversarial robustness tested",s:"met"},{id:"MEASURE 2.6",n:"Bias and fairness tested",s:"partial"},{id:"MEASURE 2.7",n:"Safety and security tested",s:"met"}],
+      features:["Adversarial — FGSM/PGD at configurable epsilon","Data Poisoning — Label-flip and backdoor","Evasion — Pixel, noise, spatial","Model Extraction — Random and active learning","Prompt Injection — 10-attack catalog","Results & Reports — Quantified metrics"]},
+    { id:"manage", name:"MANAGE", color:"text-rose-400", bg:"bg-rose-500/10", bd:"border-rose-500/20", icon:Shield, desc:"Responding and communicating about AI risks",
+      subs:[{id:"MANAGE 1.1",n:"Risk treatment plans defined",s:"met"},{id:"MANAGE 2.1",n:"AI system monitored",s:"met"},{id:"MANAGE 4.1",n:"Results communicated",s:"met"}],
+      features:["Alerts — Severity-based incident tracking","Pipeline Remediation — Control status tracking","Knowledge Base — Lessons learned","Export Reports — Stakeholder-ready JSON","Monitoring — Query rates, latency, drift"]},
+  ];
 
-  return(<div className="space-y-5">
-    <div className="flex items-center justify-between">
-      <div><h1 className="text-xl font-semibold text-white mb-1">Results & Reports</h1><p className="text-sm text-white/40">{results.length} test results for this project</p></div>
-      {results.length>0&&<button onClick={exportAll} className="flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 text-[11px] font-medium hover:bg-emerald-600/30"><Download size={13}/>Export All as JSON</button>}
+  const totalSubs = RMF.reduce((s,f)=>s+f.subs.length,0);
+  const metSubs = RMF.reduce((s,f)=>s+f.subs.filter(sc=>sc.s==="met").length,0);
+  const partialSubs = RMF.reduce((s,f)=>s+f.subs.filter(sc=>sc.s==="partial").length,0);
+  const overallPct = Math.round(metSubs/totalSubs*100);
+
+  const COMPLIANCE = [
+    {name:"NIST AI RMF",ver:"1.0 (2023)",cov:85,detail:"4 functions, 13+ sub-categories"},
+    {name:"MITRE ATLAS",ver:"5.6.0 (2025)",cov:50,detail:"8/16 tactics covered by attack modules"},
+    {name:"OWASP LLM Top 10",ver:"2025",cov:60,detail:"LLM01, LLM02, LLM07 directly covered"},
+    {name:"EU AI Act",ver:"2024",cov:45,detail:"Risk classification, documentation, robustness"},
+    {name:"ISO/IEC 42001",ver:"2023",cov:55,detail:"Pipeline controls, roles, audit trails"},
+  ];
+
+  const CONTROLS = [
+    {name:"Input Controls",icon:Database,items:["Data validation","Poison detection","PII scanning","Source authentication","Prompt filtering","Injection detection","Encoding bypass prevention"]},
+    {name:"Model Controls",icon:Cpu,items:["Adversarial robustness","Backdoor detection","Architecture review","Weight integrity","Version control","Supply chain audit"]},
+    {name:"Output Controls",icon:Filter,items:["Output guardrails","Response watermarking","Output truncation","Context isolation"]},
+    {name:"Infrastructure Controls",icon:Globe,items:["Authentication (OAuth2/JWT)","Rate limiting","Encryption at rest","Query logging","TLS enforcement","Audit trail"]},
+  ];
+
+  const riskScores = {adversarial:33,poisoning:22,evasion:15,extraction:28,injection:45};
+  const composite = 30;
+  const ratingOf = s => s<=15?"low":s<=40?"medium":s<=70?"high":"critical";
+
+  const tabs = [{id:"rmf",l:"NIST AI RMF"},{id:"controls",l:"Controls"},{id:"risk",l:"Risk Scores"},{id:"compliance",l:"Compliance"}];
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div><h1 className="text-xl font-semibold text-white mb-0.5">AI Risk Management & Governance</h1>
+        <p className="text-sm text-white/35">NIST AI RMF alignment, controls framework, and compliance tracking</p></div>
+        <button className="flex items-center gap-2 px-4 py-2 rounded-md bg-white/[0.04] text-white/50 text-[11px] hover:bg-white/[0.08] border border-white/[0.06]"><Download size={13}/>Export Report</button>
+      </div>
+
+      {/* Summary */}
+      <div className="grid grid-cols-4 gap-3">
+        {[{l:"RMF Coverage",v:`${overallPct}%`,s:`${metSubs}/${totalSubs} sub-categories met`,c:"text-emerald-400",bg:"bg-emerald-500/10",I:ShieldCheck},
+          {l:"Pipeline Health",v:"76%",s:"35/46 controls passing",c:"text-cyan-400",bg:"bg-cyan-500/10",I:Layers},
+          {l:"Partial",v:partialSubs,s:"sub-categories need attention",c:"text-amber-400",bg:"bg-amber-500/10",I:AlertTriangle},
+          {l:"Frameworks",v:COMPLIANCE.length,s:"compliance mappings tracked",c:"text-rose-400",bg:"bg-rose-500/10",I:Globe},
+        ].map(x=><div key={x.l} className={`${G} rounded-lg p-3.5`}><div className={`w-7 h-7 rounded-md ${x.bg} flex items-center justify-center mb-2`}><x.I size={14} className={x.c}/></div><div className={`text-xl font-semibold font-mono ${x.c}`}>{x.v}</div><div className="text-[10px] text-white/35">{x.l}</div><div className="text-[9px] text-white/20 mt-0.5">{x.s}</div></div>)}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-white/[0.06]">
+        {tabs.map(t=><button key={t.id} onClick={()=>setActiveTab(t.id)} className={`px-4 py-2.5 text-[11px] font-medium border-b-2 transition-all ${activeTab===t.id?"text-emerald-400 border-emerald-500/50":"text-white/40 border-transparent hover:text-white/60"}`}>{t.l}</button>)}
+      </div>
+
+      {/* RMF Tab */}
+      {activeTab==="rmf"&&<div className="space-y-3">
+        <div className="text-[9px] text-white/20 uppercase tracking-widest">NIST AI Risk Management Framework — 4 core functions</div>
+        {RMF.map(fn=>{const Icon=fn.icon;const met=fn.subs.filter(s=>s.s==="met").length;const total=fn.subs.length;const pct=Math.round(met/total*100);const open=expandedRmf===fn.id;
+        return(<div key={fn.id} className={`${G} rounded-lg overflow-hidden`}>
+          <button onClick={()=>setExpandedRmf(open?null:fn.id)} className="w-full px-5 py-4 flex items-center gap-4 hover:bg-white/[0.02] transition-colors">
+            <div className={`w-9 h-9 rounded-lg ${fn.bg} border ${fn.bd} flex items-center justify-center`}><Icon size={16} className={fn.color}/></div>
+            <div className="flex-1 text-left"><div className={`text-[12px] font-semibold ${fn.color}`}>{fn.name}</div><div className="text-[10px] text-white/35">{fn.desc}</div></div>
+            <span className="text-[9px] font-mono text-white/25">{met}/{total}</span>
+            <div className="w-14 h-1.5 rounded-full bg-white/[0.06] overflow-hidden"><div className={`h-full rounded-full ${pct>=80?"bg-emerald-500":pct>=50?"bg-amber-500":"bg-red-500"}`} style={{width:`${pct}%`}}/></div>
+            {open?<ChevronDown size={14} className="text-white/25"/>:<ChevronRight size={14} className="text-white/25"/>}
+          </button>
+          {open&&<div className="px-5 pb-5 space-y-3">
+            <div><div className="text-[8px] uppercase tracking-widest text-white/20 mb-2">BBAP-Sec Features</div>
+              {fn.features.map((f,i)=><div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-white/[0.02] mb-1"><CheckCircle2 size={11} className="text-emerald-500/50 shrink-0"/><span className="text-[10px] text-white/55">{f}</span></div>)}</div>
+            <div><div className="text-[8px] uppercase tracking-widest text-white/20 mb-2">Sub-category compliance</div>
+              {fn.subs.map((sc,i)=><div key={i} className="flex items-center gap-3 px-3 py-1.5 rounded-md bg-white/[0.02] mb-1">
+                {sc.s==="met"?<CheckCircle2 size={11} className="text-emerald-400 shrink-0"/>:<AlertTriangle size={11} className="text-amber-400 shrink-0"/>}
+                <span className="text-[10px] font-mono text-white/40 w-20 shrink-0">{sc.id}</span>
+                <span className="text-[10px] text-white/50 flex-1">{sc.n}</span>
+                <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded ${sc.s==="met"?"bg-emerald-500/10 text-emerald-400 border border-emerald-500/20":"bg-amber-500/10 text-amber-400 border border-amber-500/20"}`}>{sc.s}</span>
+              </div>)}</div>
+          </div>}
+        </div>);})}
+      </div>}
+
+      {/* Controls Tab */}
+      {activeTab==="controls"&&<div className="space-y-3">
+        <div className="text-[9px] text-white/20 uppercase tracking-widest">Layered control framework — 4 domains</div>
+        {CONTROLS.map((d,i)=>{const Icon=d.icon;return(
+          <div key={i} className={`${G} rounded-lg p-5`}>
+            <div className="flex items-center gap-3 mb-3"><div className="w-8 h-8 rounded-lg bg-white/[0.04] flex items-center justify-center"><Icon size={15} className="text-white/40"/></div><span className="text-[12px] font-medium text-white/70">{d.name}</span><span className="text-[9px] text-white/20">{d.items.length} controls</span></div>
+            <div className="grid grid-cols-3 gap-1.5">{d.items.map((c,j)=><div key={j} className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-white/[0.02]"><CheckCircle2 size={10} className="text-emerald-500/40 shrink-0"/><span className="text-[10px] text-white/50">{c}</span></div>)}</div>
+          </div>
+        );})}
+      </div>}
+
+      {/* Risk Scores Tab */}
+      {activeTab==="risk"&&<div className="space-y-5">
+        <div className="text-[9px] text-white/20 uppercase tracking-widest">Risk assessment — quantified scores from attack modules</div>
+        <div className={`${G} rounded-lg p-6 text-center`}>
+          <div className={`text-3xl font-bold font-mono ${SEV[ratingOf(composite)].tx}`}>{composite}</div>
+          <div className="text-[10px] text-white/30 mt-1">Composite risk score (0–100)</div>
+          <span className={`inline-block mt-2 text-[9px] font-mono px-2 py-0.5 rounded ${SEV[ratingOf(composite)].bg} ${SEV[ratingOf(composite)].tx} border ${SEV[ratingOf(composite)].bd}`}>{ratingOf(composite)}</span>
+        </div>
+        <div className="grid grid-cols-5 gap-3">
+          {[{k:"adversarial",l:"Adversarial",w:1.0},{k:"poisoning",l:"Poisoning",w:1.2},{k:"evasion",l:"Evasion",w:0.8},{k:"extraction",l:"Extraction",w:1.0},{k:"injection",l:"Injection",w:1.5}].map(a=>{
+            const sc=riskScores[a.k];const r=ratingOf(sc);const sv=SEV[r];
+            return(<div key={a.k} className={`${G} rounded-lg p-4 text-center`}><div className={`text-xl font-bold font-mono ${sv.tx}`}>{sc}</div><div className="text-[10px] text-white/45 mt-1">{a.l}</div><div className="text-[8px] text-white/20 font-mono">weight: {a.w}</div><span className={`inline-block mt-2 text-[8px] font-mono px-1.5 py-0.5 rounded ${sv.bg} ${sv.tx} border ${sv.bd}`}>{r}</span></div>);
+          })}
+        </div>
+        <div className={`${G} rounded-lg p-4`}>
+          <div className="text-[9px] text-white/20 uppercase tracking-widest mb-2">Risk scoring formula</div>
+          <div className="font-mono text-[10px] text-white/40 space-y-1">
+            <div><span className="text-emerald-400">project_risk</span> = Σ(weight × risk_score) / Σ(weight)</div>
+            <div><span className="text-emerald-400">adjusted_risk</span> = project_risk × (1 - pipeline_health / 200)</div>
+          </div>
+        </div>
+      </div>}
+
+      {/* Compliance Tab */}
+      {activeTab==="compliance"&&<div className="space-y-3">
+        <div className="text-[9px] text-white/20 uppercase tracking-widest">Multi-framework compliance mapping</div>
+        {COMPLIANCE.map((fw,i)=>{const col=fw.cov>=80?"bg-emerald-500":fw.cov>=50?"bg-amber-500":"bg-red-500";const tc=fw.cov>=80?"text-emerald-400":fw.cov>=50?"text-amber-400":"text-red-400";
+        return(<div key={i} className={`${G} rounded-lg px-5 py-4`}>
+          <div className="flex items-center justify-between mb-2"><div><div className="text-[12px] font-medium text-white/80">{fw.name}</div><div className="text-[9px] font-mono text-white/20">{fw.ver}</div></div><span className={`text-[10px] font-mono px-2 py-0.5 rounded ${tc}`}>{fw.cov}%</span></div>
+          <div className="w-full h-1.5 rounded-full bg-white/[0.06] overflow-hidden mb-1.5"><div className={`h-full rounded-full ${col}`} style={{width:`${fw.cov}%`}}/></div>
+          <div className="text-[10px] text-white/25">{fw.detail}</div>
+        </div>);})}
+
+        <div className={`${G} rounded-lg p-5 mt-2`}>
+          <div className="flex items-center gap-2 mb-3"><FileText size={14} className="text-white/40"/><span className="text-[12px] font-medium text-white/70">Assessment templates</span></div>
+          {["AI Threat Model Template — threat-model-template.md","AI Risk Assessment Template — risk-assessment-template.md","AI Security Test Report — ai-security-test-report-template.md","Incident Response Playbook — incident-response-playbook-template.md"].map((t,i)=>
+            <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-md bg-white/[0.02] hover:bg-white/[0.04] cursor-pointer transition-colors mb-1"><BookOpen size={11} className="text-emerald-500/40 shrink-0"/><span className="text-[10px] text-white/50 flex-1">{t}</span><ExternalLink size={10} className="text-white/15"/></div>
+          )}
+          <div className="text-[9px] text-white/20 mt-2">Templates are in <span className="font-mono">doc/templates/</span></div>
+        </div>
+      </div>}
     </div>
-    {results.length===0?<div className={`${G} rounded-lg p-10 text-center`}><Shield size={32} className="text-white/10 mx-auto mb-3"/><p className="text-sm text-white/30">No results yet. Run an attack to generate reports.</p></div>:
-    <div className="space-y-2">{results.map(r=>{
-      const rd=r.result_data||{};const isErr=!!rd.error;
-      return(<div key={r.id} className={`${G} rounded-lg overflow-hidden`}>
-        <button onClick={()=>sExp(expanded===r.id?null:r.id)} className="w-full flex items-center gap-4 px-5 py-4 text-left hover:bg-white/[0.02] transition-colors">
-          <div className={`w-8 h-8 rounded-md flex items-center justify-center ${isErr?"bg-red-500/10":"bg-emerald-500/10"}`}>{isErr?<XCircle size={14} className="text-red-400"/>:<CheckCircle2 size={14} className="text-emerald-400"/>}</div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[12px] font-medium text-white/80">{r.attack_type}</div>
-            <div className="text-[10px] text-white/35 font-mono">{r.created_at}</div>
-          </div>
-          <div className="flex items-center gap-3">
-            {rd.clean_accuracy&&<span className="text-[9px] font-mono text-white/30">clean: {rd.clean_accuracy}%</span>}
-            {rd.adversarial_accuracy!=null&&<span className="text-[9px] font-mono text-amber-400">adv: {rd.adversarial_accuracy}%</span>}
-            {rd.fidelity!=null&&<span className="text-[9px] font-mono text-blue-400">fidelity: {rd.fidelity}%</span>}
-            {rd.evasion_rate!=null&&<span className="text-[9px] font-mono text-orange-400">evasion: {rd.evasion_rate}%</span>}
-            <span className={`text-[9px] font-mono px-2 py-0.5 rounded ${isErr?"bg-red-500/10 text-red-400":"bg-emerald-500/10 text-emerald-400"}`}>{r.status}</span>
-            <button onClick={e=>{e.stopPropagation();exportOne(r);}} className="p-1.5 rounded hover:bg-white/[0.06] text-white/25 hover:text-white/60"><Download size={12}/></button>
-            <ChevronDown size={14} className={`text-white/30 transition-transform ${expanded===r.id?"rotate-180":""}`}/>
-          </div>
-        </button>
-        {expanded===r.id&&<div className="px-5 pb-4 border-t border-white/[0.04]">
-          <div className="grid grid-cols-2 gap-4 pt-4">
-            <div><div className="text-[9px] text-white/25 uppercase tracking-widest mb-1">Parameters</div><pre className="text-[10px] font-mono text-white/40 bg-black/20 rounded p-3">{JSON.stringify(r.attack_params,null,2)}</pre></div>
-            <div><div className="text-[9px] text-white/25 uppercase tracking-widest mb-1">Results</div><pre className="text-[10px] font-mono text-emerald-400/70 bg-black/20 rounded p-3">{JSON.stringify(rd,null,2)}</pre></div>
-          </div>
-        </div>}
-      </div>);
-    })}</div>}
-  </div>);
+  );
 }
 
 /* ═══════════════════════════════════
-   MONITORING
+   MONITORING PAGE
    ═══════════════════════════════════ */
-function MonitoringPage(){
-  const metrics=[{l:"Queries / min",v:"842",t:"+12%",s:"normal"},{l:"Avg Latency",v:"45ms",t:"-3ms",s:"normal"},{l:"Error Rate",v:"0.02%",t:"stable",s:"normal"},{l:"Blocked",v:"23",t:"+5 today",s:"warning"},{l:"Accuracy",v:"97.8%",t:"-0.3%",s:"normal"},{l:"Drift Score",v:"0.04",t:"below threshold",s:"normal"}];
-  return(<div className="space-y-5"><div><h1 className="text-xl font-semibold text-white mb-1">Monitoring</h1><p className="text-sm text-white/40">System metrics and activity</p></div>
-    <div className="grid grid-cols-3 gap-3">{metrics.map(m=><div key={m.l} className={`${G} rounded-lg p-4`}><div className="text-[10px] text-white/35 uppercase tracking-wider mb-2">{m.l}</div><div className="text-xl font-semibold text-white/90 mb-1">{m.v}</div><div className={`text-[10px] font-mono ${m.s==="warning"?"text-amber-400":"text-white/30"}`}>{m.t}</div></div>)}</div>
-  </div>);
+function MonitoringPage() {
+  const metrics = [
+    {l:"Queries / min",v:"842",trend:"+12%",dir:"up",status:"normal"},
+    {l:"Avg Latency",v:"45ms",trend:"-3ms",dir:"down",status:"normal"},
+    {l:"Error Rate",v:"0.02%",trend:"stable",dir:"flat",status:"normal"},
+    {l:"Blocked Requests",v:"23",trend:"+5 today",dir:"up",status:"warning"},
+    {l:"Model Accuracy",v:"97.8%",trend:"-0.3%",dir:"down",status:"normal"},
+    {l:"Drift Score",v:"0.04",trend:"below threshold",dir:"flat",status:"normal"},
+  ];
+
+  const recentEvents = [
+    {time:"2 min ago", event:"Rate limit triggered — 5 requests blocked from 192.168.1.42", sev:"warning"},
+    {time:"14 min ago", event:"Model accuracy check passed — 97.8% on validation set", sev:"ok"},
+    {time:"1 hr ago", event:"Drift score computed — 0.04 (threshold: 0.1)", sev:"ok"},
+    {time:"3 hr ago", event:"Sandbox bbap-sbx-001 health check passed", sev:"ok"},
+    {time:"5 hr ago", event:"Unusual query pattern detected — 340 sequential requests", sev:"warning"},
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div><h1 className="text-xl font-semibold text-white mb-0.5">Monitoring</h1><p className="text-sm text-white/35">Real-time system metrics and activity tracking</p></div>
+
+      <div className="grid grid-cols-3 gap-3">
+        {metrics.map(m=>{
+          const DirIcon = m.dir==="up"?TrendingUp:m.dir==="down"?TrendingDown:Minus;
+          return(<div key={m.l} className={`${G} rounded-lg p-4`}>
+            <div className="text-[9px] text-white/25 uppercase tracking-wider mb-2">{m.l}</div>
+            <div className="text-xl font-semibold text-white/90 mb-1">{m.v}</div>
+            <div className={`flex items-center gap-1.5 text-[10px] font-mono ${m.status==="warning"?"text-amber-400":"text-white/30"}`}>
+              <DirIcon size={11}/>{m.trend}
+            </div>
+          </div>);
+        })}
+      </div>
+
+      <div className={`${G} rounded-lg p-5`}>
+        <div className="text-[9px] font-semibold text-white/25 uppercase tracking-widest mb-3">Recent events</div>
+        <div className="space-y-2">
+          {recentEvents.map((e,i)=>(
+            <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-md bg-white/[0.02]">
+              <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${e.sev==="warning"?"bg-amber-400":"bg-emerald-400"}`}/>
+              <span className="text-[10px] font-mono text-white/20 w-20 shrink-0">{e.time}</span>
+              <span className="text-[10px] text-white/55 flex-1">{e.event}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className={`${G} rounded-lg p-5`}>
+        <div className="text-[9px] font-semibold text-white/25 uppercase tracking-widest mb-3">Active sandbox resources</div>
+        <div className="grid grid-cols-4 gap-4">
+          {[{l:"CPU",v:"24%",c:"text-emerald-400"},{l:"Memory",v:"1.2 GB",c:"text-blue-400"},{l:"GPU",v:"38%",c:"text-violet-400"},{l:"Disk",v:"840 MB",c:"text-amber-400"}].map(r=>
+            <div key={r.l}><div className="text-[9px] text-white/20 uppercase tracking-wider">{r.l}</div><div className={`text-lg font-semibold font-mono ${r.c} mt-1`}>{r.v}</div></div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ═══════════════════════════════════
-   USERS
+   PLACEHOLDER PAGES
    ═══════════════════════════════════ */
-function UsersPage(){
-  const[us,sU]=useState([]);const[sh,sSh]=useState(false);const[f,sF]=useState({name:"",email:"",role:"viewer"});const[eid,sEid]=useState(null);
-  const ld=()=>api.get("/users").then(sU);useEffect(()=>{ld();},[]);
-  const R={admin:"bg-red-500/10 text-red-400 border-red-500/20",analyst:"bg-blue-500/10 text-blue-400 border-blue-500/20",viewer:"bg-white/[0.06] text-white/50 border-white/10"};
-  const sv=async()=>{if(!f.name||!f.email)return;if(eid)await api.put(`/users/${eid}`,f);else await api.post("/users",f);sSh(false);sF({name:"",email:"",role:"viewer"});sEid(null);ld();};
-  return(<div className="space-y-5"><div className="flex items-center justify-between"><div><h1 className="text-xl font-semibold text-white mb-1">User Management</h1></div><button onClick={()=>{sSh(true);sEid(null);sF({name:"",email:"",role:"viewer"});}} className="flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 text-[11px] font-medium hover:bg-emerald-600/30"><UserPlus size={13}/>Add User</button></div>
-    {sh&&<div className={`${G} rounded-lg p-5`}><div className="grid grid-cols-3 gap-4"><div><label className="text-[10px] text-white/40 block mb-1">Name</label><input value={f.name} onChange={e=>sF({...f,name:e.target.value})} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/80 text-[12px] focus:outline-none focus:border-emerald-500/30"/></div><div><label className="text-[10px] text-white/40 block mb-1">Email</label><input value={f.email} onChange={e=>sF({...f,email:e.target.value})} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/80 text-[12px] font-mono focus:outline-none focus:border-emerald-500/30"/></div><div><label className="text-[10px] text-white/40 block mb-1">Role</label><select value={f.role} onChange={e=>sF({...f,role:e.target.value})} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/70 text-[12px] focus:outline-none"><option value="viewer">Viewer</option><option value="analyst">Analyst</option><option value="admin">Admin</option></select></div></div><div className="flex gap-2 mt-4"><button onClick={sv} className="px-4 py-2 rounded-md bg-emerald-600 text-white text-[11px] font-medium">Save</button><button onClick={()=>sSh(false)} className="px-4 py-2 rounded-md bg-white/[0.06] text-white/50 text-[11px]">Cancel</button></div></div>}
-    <div className={`${G} rounded-lg overflow-hidden`}><table className="w-full"><thead><tr className="border-b border-white/[0.06]">{["User","Email","Role","Status","MFA","Actions"].map(h=><th key={h} className="text-left px-4 py-3 text-[9px] font-semibold text-white/30 uppercase tracking-widest">{h}</th>)}</tr></thead><tbody>{us.map(u=><tr key={u.id} className="border-b border-white/[0.03] hover:bg-white/[0.02]"><td className="px-4 py-3"><div className="flex items-center gap-3"><div className="w-7 h-7 rounded-full bg-white/[0.06] flex items-center justify-center text-[10px] font-medium text-white/50">{u.name.split(" ").map(n=>n[0]).join("")}</div><span className="text-[12px] text-white/80">{u.name}</span></div></td><td className="px-4 py-3 text-[11px] text-white/50 font-mono">{u.email}</td><td className="px-4 py-3"><span className={`text-[9px] font-mono px-2 py-0.5 rounded border ${R[u.role]||R.viewer}`}>{u.role}</span></td><td className="px-4 py-3"><span className={`text-[9px] font-mono ${u.status==="active"?"text-emerald-400":"text-red-400"}`}>{u.status}</span></td><td className="px-4 py-3">{u.mfa?<Lock size={12} className="text-emerald-500/60"/>:<Unlock size={12} className="text-white/20"/>}</td><td className="px-4 py-3"><div className="flex gap-1.5"><button onClick={()=>{sF({name:u.name,email:u.email,role:u.role});sEid(u.id);sSh(true);}} className="p-1.5 rounded hover:bg-white/[0.06] text-white/30 hover:text-white/60"><Edit3 size={12}/></button><button onClick={async()=>{await api.del(`/users/${u.id}`);ld();}} className="p-1.5 rounded hover:bg-red-500/10 text-white/20 hover:text-red-400"><Trash2 size={12}/></button></div></td></tr>)}</tbody></table></div></div>);
+function PlaceholderPage({ title, desc }) {
+  return (
+    <div className="space-y-5">
+      <div><h1 className="text-xl font-semibold text-white mb-0.5">{title}</h1><p className="text-sm text-white/35">{desc}</p></div>
+      <div className={`${G} rounded-lg p-10 text-center`}><Shield size={32} className="text-white/10 mx-auto mb-3" /><p className="text-sm text-white/25">Section ready for implementation</p></div>
+    </div>
+  );
 }
-
-/* ═══════════════════════════════════
-   KNOWLEDGE BASE
-   ═══════════════════════════════════ */
-function KnowledgePage({pid}){
-  const[ns,sN]=useState([]);const[sh,sSh]=useState(false);const[f,sF]=useState({title:"",content:"",tags:""});const[eid,sEid]=useState(null);const[q,sQ]=useState("");
-  const ld=()=>api.get(`/notes?project_id=${pid}`).then(sN);useEffect(()=>{ld();},[pid]);
-  const sv=async()=>{if(!f.title)return;const tags=f.tags.split(",").map(t=>t.trim()).filter(Boolean);if(eid)await api.put(`/notes/${eid}`,{title:f.title,content:f.content,tags});else await api.post("/notes",{title:f.title,content:f.content,tags,project_id:pid});sSh(false);sF({title:"",content:"",tags:""});sEid(null);ld();};
-  const fil=ns.filter(n=>!q||n.title.toLowerCase().includes(q.toLowerCase())||n.content.toLowerCase().includes(q.toLowerCase()));
-  return(<div className="space-y-5"><div className="flex items-center justify-between"><div><h1 className="text-xl font-semibold text-white mb-1">Knowledge Base</h1></div><button onClick={()=>{sSh(true);sEid(null);sF({title:"",content:"",tags:""});}} className="flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 text-[11px] font-medium hover:bg-emerald-600/30"><Plus size={13}/>New Note</button></div>
-    <div className={`flex items-center gap-2 px-3 py-2 rounded-md ${G}`}><Search size={13} className="text-white/25"/><input value={q} onChange={e=>sQ(e.target.value)} placeholder="Search..." className="flex-1 bg-transparent text-[12px] text-white/70 focus:outline-none placeholder:text-white/20"/></div>
-    {sh&&<div className={`${G} rounded-lg p-5`}><input value={f.title} onChange={e=>sF({...f,title:e.target.value})} placeholder="Title..." className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/80 text-sm mb-3 focus:outline-none focus:border-emerald-500/30"/><textarea value={f.content} onChange={e=>sF({...f,content:e.target.value})} placeholder="Content..." rows={5} className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[12px] leading-relaxed mb-3 focus:outline-none focus:border-emerald-500/30 resize-none font-mono"/><input value={f.tags} onChange={e=>sF({...f,tags:e.target.value})} placeholder="Tags (comma-separated)" className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/60 text-[11px] font-mono mb-3 focus:outline-none focus:border-emerald-500/30"/><div className="flex gap-2"><button onClick={sv} className="px-4 py-2 rounded-md bg-emerald-600 text-white text-[11px] font-medium">Save</button><button onClick={()=>sSh(false)} className="px-4 py-2 rounded-md bg-white/[0.06] text-white/50 text-[11px]">Cancel</button></div></div>}
-    <div className="space-y-3">{fil.map(n=><div key={n.id} className={`${G} rounded-lg p-5 ${n.pinned?"border-l-2 border-l-emerald-500/40":""}`}><div className="flex items-start justify-between mb-2"><h3 className="text-sm font-medium text-white/90">{n.title}</h3><div className="flex gap-1"><button onClick={async()=>{await api.put(`/notes/${n.id}`,{pinned:n.pinned?0:1});ld();}} className={`p-1.5 rounded hover:bg-white/[0.06] ${n.pinned?"text-emerald-400":"text-white/20"}`}><BookOpen size={11}/></button><button onClick={()=>{sF({title:n.title,content:n.content,tags:(n.tags||[]).join(", ")});sEid(n.id);sSh(true);}} className="p-1.5 rounded hover:bg-white/[0.06] text-white/25 hover:text-white/60"><Edit3 size={11}/></button><button onClick={async()=>{await api.del(`/notes/${n.id}`);ld();}} className="p-1.5 rounded hover:bg-red-500/10 text-white/15 hover:text-red-400"><Trash2 size={11}/></button></div></div><p className="text-[12px] text-white/50 leading-relaxed mb-3 whitespace-pre-wrap">{n.content}</p><div className="flex items-center justify-between"><div className="flex gap-1.5">{(n.tags||[]).map(t=><span key={t} className="text-[9px] font-mono px-2 py-0.5 rounded bg-white/[0.04] text-white/35 border border-white/[0.06]">{t}</span>)}</div><span className="text-[9px] font-mono text-white/20">{n.created_at?.split("T")[0]}</span></div></div>)}</div></div>);
-}
-
-/* ═══════════════════════════════════
-   ALERTS
-   ═══════════════════════════════════ */
-function AlertsPage({alerts,refresh}){
-  const ack=async id=>{await api.post(`/alerts/${id}/ack`);refresh();};
-  const ackAll=async()=>{await api.post("/alerts/ack-all");refresh();};
-  const un=alerts.filter(a=>!a.acknowledged).length;
-  return(<div className="space-y-5"><div className="flex items-center justify-between"><div><h1 className="text-xl font-semibold text-white mb-1">Alerts</h1><p className="text-sm text-white/40">{un} unacknowledged</p></div>{un>0&&<button onClick={ackAll} className="flex items-center gap-2 px-4 py-2 rounded-md bg-white/[0.06] text-white/50 text-[11px] hover:bg-white/[0.08]"><Check size={13}/>Ack All</button>}</div>
-    <div className="space-y-2">{alerts.map(a=>{const s=SV[a.severity]||SV.medium;return(<div key={a.id} className={`${G} rounded-lg px-5 py-4 flex items-center gap-4 ${a.acknowledged?"opacity-40":""}`}><div className={`w-2 h-2 rounded-full shrink-0 ${s.dt}`}/><div className="flex-1 min-w-0"><div className="text-[12px] text-white/80 mb-0.5">{a.title}</div><div className="text-[9px] font-mono text-white/30">{a.source} — {a.created_at}</div></div><span className={`text-[9px] font-mono px-2 py-0.5 rounded ${s.bg} ${s.tx} border ${s.bd}`}>{a.severity}</span>{!a.acknowledged&&<button onClick={()=>ack(a.id)} className="px-3 py-1.5 rounded-md bg-white/[0.04] text-white/40 text-[10px] hover:bg-white/[0.08]">Ack</button>}</div>);})}</div></div>);
-}
-
-/* ═══════════════════════════════════
-   SETTINGS
-   ═══════════════════════════════════ */
-function SettingsPage(){return(<div className="space-y-5"><div><h1 className="text-xl font-semibold text-white mb-1">Settings</h1></div><div className="grid grid-cols-2 gap-4">{[{t:"API Configuration",d:"Keys, rate limits, tokens",I:Key},{t:"Email / SMTP",d:"Alert delivery",I:Mail},{t:"Authentication",d:"SSO, MFA, sessions",I:Lock},{t:"Integrations",d:"SIEM, ticketing",I:Zap},{t:"Backup",d:"Database export",I:Database},{t:"Audit Log",d:"Access history",I:FileText}].map(s=><div key={s.t} className={`${G} rounded-lg p-5 hover:bg-white/[0.06] cursor-pointer transition-all`}><div className="flex items-center gap-3"><div className="w-9 h-9 rounded-lg bg-white/[0.04] flex items-center justify-center"><s.I size={16} className="text-white/40"/></div><div><div className="text-[13px] font-medium text-white/80">{s.t}</div><div className="text-[10px] text-white/35">{s.d}</div></div></div></div>)}</div></div>);}
 
 /* ═══════════════════════════════════
    MAIN APP
    ═══════════════════════════════════ */
-export default function App(){
-  const[page,sPage]=useState("dashboard");
-  const[projects,sProjects]=useState([]);
-  const[project,sProject]=useState(null);
-  const[showNew,sShowNew]=useState(false);
-  const[stats,sStats]=useState({pipeline_health:0,total_checks:0,passed_checks:0,active_alerts:0,total_alerts:0,total_results:0,active_users:0});
-  const[pipeline,sPipeline]=useState([]);
-  const[alerts,sAlerts]=useState([]);
+export default function App() {
+  const [page, setPage] = useState("overview");
+  const engagement = MOCK_ENGAGEMENT;
 
-  const ldProjects=useCallback(async()=>{const ps=await api.get("/projects");sProjects(ps);if(ps.length>0&&!project)sProject(ps[0]);if(ps.length===0)sShowNew(true);},[project]);
-  const ldData=useCallback(async()=>{if(!project)return;const[s,p,a]=await Promise.all([api.get(`/projects/${project.id}/stats`),api.get(`/projects/${project.id}/pipeline`),api.get(`/projects/${project.id}/alerts`)]);sStats(s);sPipeline(p);sAlerts(a);},[project]);
-  useEffect(()=>{ldProjects();},[]);
-  useEffect(()=>{if(project)ldData();},[project,page]);
-  const refresh=()=>ldData();
-
-  if(!project&&projects.length===0)return(
-    <div className="flex h-screen bg-[#080b12] items-center justify-center" style={{fontFamily:"'DM Sans',system-ui,sans-serif"}}>
-      <div className="fixed inset-0 pointer-events-none" style={{background:"radial-gradient(ellipse 60% 40% at 20% 10%,rgba(46,204,113,0.03),transparent)"}}/>
-      {showNew&&<NewProjectModal onClose={()=>{}} onCreated={ldProjects}/>}
-      <div className="text-center relative z-10">
-        <img src="/frontend/public/logo.png" alt="BBAP-Sec" className="w-16 h-16 rounded-xl mx-auto mb-4 object-cover" onError={e=>{e.target.style.display='none';}}/>
-        <h1 className="text-lg font-semibold text-white mb-2">Welcome to BBAP-Sec</h1>
-        <p className="text-sm text-white/40 mb-4">Create your first project to get started</p>
-        <button onClick={()=>sShowNew(true)} className="px-5 py-2 rounded-md bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500">Create Project</button>
-      </div>
-    </div>
-  );
-
-  const P={
-    dashboard:<DashPage stats={stats} pipeline={pipeline} alerts={alerts}/>,
-    pipeline:<PipelinePage pipeline={pipeline} refresh={refresh}/>,
-    attacks:<AttacksPage pid={project?.id} refresh={refresh}/>,
-    atlas:<AtlasPage/>,
-    results:<ResultsPage pid={project?.id}/>,
-    monitoring:<MonitoringPage/>,
-    users:<UsersPage/>,
-    knowledge:<KnowledgePage pid={project?.id}/>,
-    alerts:<AlertsPage alerts={alerts} refresh={refresh}/>,
-    settings:<SettingsPage/>,
+  const getContent = () => {
+    if (page === "overview") return <OverviewPage engagement={engagement} />;
+    if (page === "target") return <TargetPage />;
+    if (page.startsWith("layer_")) return <LayerPage layerKey={page.replace("layer_", "")} />;
+    if (page === "findings") return <FindingsPage />;
+    if (page === "report") return <ReportPage />;
+    if (page === "governance") return <GovernancePage engagement={engagement} />;
+    if (page === "monitoring") return <MonitoringPage />;
+    if (page === "pipeline_checks") return <PlaceholderPage title="Secure Pipeline" desc="46 security controls across 5 stages" />;
+    if (page === "atlas") return <AtlasPage />;
+    if (page === "team") return <PlaceholderPage title="Team" desc="User management and engagement assignments" />;
+    if (page === "knowledge") return <PlaceholderPage title="Knowledge Base" desc="Notes, policies, and templates" />;
+    if (page === "alerts") return <PlaceholderPage title="Alerts" desc="Severity-based notifications" />;
+    if (page === "settings") return <PlaceholderPage title="Settings" desc="API keys, sandbox config, audit log" />;
+    return <OverviewPage engagement={engagement} />;
   };
 
-  return(
-    <div className="flex h-screen bg-[#080b12] text-white overflow-hidden" style={{fontFamily:"'DM Sans',system-ui,sans-serif"}}>
-      <div className="fixed inset-0 pointer-events-none" style={{background:"radial-gradient(ellipse 60% 40% at 20% 10%,rgba(46,204,113,0.03),transparent),radial-gradient(ellipse 50% 50% at 80% 80%,rgba(184,115,51,0.02),transparent)"}}/>
-      <Sidebar page={page} setPage={sPage} project={project} projects={projects} setProject={sProject} setShowNew={sShowNew} ac={stats.active_alerts}/>
-      <main className="flex-1 overflow-y-auto relative z-10 p-6 pb-20">{P[page]}</main>
-      {showNew&&<NewProjectModal onClose={()=>sShowNew(false)} onCreated={ldProjects}/>}
+  return (
+    <div className="flex h-screen bg-[#080b12] text-white overflow-hidden" style={{ fontFamily: "'DM Sans',system-ui,sans-serif" }}>
+      <div className="fixed inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse 60% 40% at 20% 10%,rgba(46,204,113,0.03),transparent),radial-gradient(ellipse 50% 50% at 80% 80%,rgba(184,115,51,0.02),transparent)" }} />
+      <Sidebar page={page} setPage={setPage} engagement={engagement} />
+      <main className="flex-1 overflow-y-auto relative z-10 p-6 pb-20">{getContent()}</main>
     </div>
   );
 }

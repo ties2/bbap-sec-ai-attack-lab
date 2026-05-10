@@ -1,0 +1,409 @@
+.
+├── Dockerfile
+├── README.md
+├── archive
+│   ├── BBAP-Sec-Dashboard_v1.jsx
+│   ├── app.py
+│   ├── favicon.svg
+│   └── icons.svg
+├── assets
+├── checklists
+│   ├── 01_adversarial_attacks.md
+│   ├── 02_data_poisoning.md
+│   ├── 03_evasion_attacks.md
+│   ├── 04_model_extraction.md
+│   └── 05_prompt_injection.md
+├── config
+│   └── config.yaml
+├── data
+│   └── bbap_sec.db
+├── datasets
+│   ├── data
+│   │   ├── MNIST
+│   │   └── cifar-10-batches-py
+│   └── download_datasets.py
+├── doc
+│   ├── ai-risk-management
+│   │   ├── README.md
+│   │   ├── compliance-mapping.md
+│   │   ├── governance-controls.md
+│   │   ├── nist-ai-rmf-alignment.md
+│   │   └── risk-assessment-methodology.md
+│   └── templates
+│       ├── README.md
+│       ├── ai-security-test-report-template.md
+│       ├── incident-response-playbook-template.md
+│       ├── risk-assessment-template.md
+│       └── threat-model-template.md
+├── docker-compose.yml
+├── frontend
+│   ├── README.md
+│   ├── dist
+│   │   ├── assets
+│   │   ├── index.html
+│   │   └── logo.png
+│   ├── eslint.config.js
+│   ├── index.html
+│   ├── node_modules
+│   │   ├── @babel
+│   │   ├── @eslint
+│   │   ├── @eslint-community
+│   │   ├── @humanfs
+│   │   ├── @humanwhocodes
+│   │   ├── @jridgewell
+│   │   ├── @oxc-project
+│   │   ├── @reduxjs
+│   │   ├── @rolldown
+│   │   ├── @standard-schema
+│   │   ├── @tailwindcss
+│   │   ├── @types
+│   │   ├── @vitejs
+│   │   ├── acorn
+│   │   ├── acorn-jsx
+│   │   ├── ajv
+│   │   ├── autoprefixer
+│   │   ├── balanced-match
+│   │   ├── baseline-browser-mapping
+│   │   ├── brace-expansion
+│   │   ├── browserslist
+│   │   ├── caniuse-lite
+│   │   ├── clsx
+│   │   ├── convert-source-map
+│   │   ├── cross-spawn
+│   │   ├── csstype
+│   │   ├── d3-array
+│   │   ├── d3-color
+│   │   ├── d3-ease
+│   │   ├── d3-format
+│   │   ├── d3-interpolate
+│   │   ├── d3-path
+│   │   ├── d3-scale
+│   │   ├── d3-shape
+│   │   ├── d3-time
+│   │   ├── d3-time-format
+│   │   ├── d3-timer
+│   │   ├── debug
+│   │   ├── decimal.js-light
+│   │   ├── deep-is
+│   │   ├── detect-libc
+│   │   ├── electron-to-chromium
+│   │   ├── enhanced-resolve
+│   │   ├── es-toolkit
+│   │   ├── escalade
+│   │   ├── escape-string-regexp
+│   │   ├── eslint
+│   │   ├── eslint-plugin-react-hooks
+│   │   ├── eslint-plugin-react-refresh
+│   │   ├── eslint-scope
+│   │   ├── eslint-visitor-keys
+│   │   ├── espree
+│   │   ├── esquery
+│   │   ├── esrecurse
+│   │   ├── estraverse
+│   │   ├── esutils
+│   │   ├── eventemitter3
+│   │   ├── fast-deep-equal
+│   │   ├── fast-json-stable-stringify
+│   │   ├── fast-levenshtein
+│   │   ├── fdir
+│   │   ├── file-entry-cache
+│   │   ├── find-up
+│   │   ├── flat-cache
+│   │   ├── flatted
+│   │   ├── fraction.js
+│   │   ├── fsevents
+│   │   ├── gensync
+│   │   ├── glob-parent
+│   │   ├── globals
+│   │   ├── graceful-fs
+│   │   ├── hermes-estree
+│   │   ├── hermes-parser
+│   │   ├── ignore
+│   │   ├── immer
+│   │   ├── imurmurhash
+│   │   ├── internmap
+│   │   ├── is-extglob
+│   │   ├── is-glob
+│   │   ├── isexe
+│   │   ├── jiti
+│   │   ├── js-tokens
+│   │   ├── jsesc
+│   │   ├── json-buffer
+│   │   ├── json-schema-traverse
+│   │   ├── json-stable-stringify-without-jsonify
+│   │   ├── json5
+│   │   ├── keyv
+│   │   ├── levn
+│   │   ├── lightningcss
+│   │   ├── lightningcss-darwin-x64
+│   │   ├── locate-path
+│   │   ├── lru-cache
+│   │   ├── lucide-react
+│   │   ├── magic-string
+│   │   ├── minimatch
+│   │   ├── ms
+│   │   ├── nanoid
+│   │   ├── natural-compare
+│   │   ├── node-releases
+│   │   ├── optionator
+│   │   ├── p-limit
+│   │   ├── p-locate
+│   │   ├── path-exists
+│   │   ├── path-key
+│   │   ├── picocolors
+│   │   ├── picomatch
+│   │   ├── postcss
+│   │   ├── postcss-value-parser
+│   │   ├── prelude-ls
+│   │   ├── punycode
+│   │   ├── react
+│   │   ├── react-dom
+│   │   ├── react-is
+│   │   ├── react-redux
+│   │   ├── recharts
+│   │   ├── redux
+│   │   ├── redux-thunk
+│   │   ├── reselect
+│   │   ├── rolldown
+│   │   ├── scheduler
+│   │   ├── semver
+│   │   ├── shebang-command
+│   │   ├── shebang-regex
+│   │   ├── source-map-js
+│   │   ├── tailwindcss
+│   │   ├── tapable
+│   │   ├── tiny-invariant
+│   │   ├── tinyglobby
+│   │   ├── type-check
+│   │   ├── update-browserslist-db
+│   │   ├── uri-js
+│   │   ├── use-sync-external-store
+│   │   ├── victory-vendor
+│   │   ├── vite
+│   │   ├── which
+│   │   ├── word-wrap
+│   │   ├── yallist
+│   │   ├── yocto-queue
+│   │   ├── zod
+│   │   └── zod-validation-error
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── public
+│   │   └── logo.png
+│   ├── src
+│   │   ├── App.css
+│   │   ├── App.jsx
+│   │   ├── BBAP-Sec-Dashboard.jsx
+│   │   ├── BBAP-Sec-Dashboard_v2.jsx
+│   │   ├── assets
+│   │   ├── components
+│   │   ├── index.css
+│   │   └── main.jsx
+│   └── vite.config.js
+├── logs
+│   ├── adversarial.log
+│   ├── atlas.log
+│   ├── atlas_cli.log
+│   ├── atlas_mapper.log
+│   ├── data_poisoning.log
+│   ├── pipeline.log
+│   ├── prompt_injection.log
+│   ├── system.log
+│   ├── target_model.log
+│   └── webapp.log
+├── node_modules
+│   ├── autoprefixer
+│   │   ├── LICENSE
+│   │   ├── README.md
+│   │   ├── bin
+│   │   ├── data
+│   │   ├── lib
+│   │   └── package.json
+│   ├── baseline-browser-mapping
+│   │   ├── LICENSE.txt
+│   │   ├── README.md
+│   │   ├── dist
+│   │   └── package.json
+│   ├── browserslist
+│   │   ├── LICENSE
+│   │   ├── README.md
+│   │   ├── browser.js
+│   │   ├── cli.js
+│   │   ├── error.d.ts
+│   │   ├── error.js
+│   │   ├── index.d.ts
+│   │   ├── index.js
+│   │   ├── node.js
+│   │   ├── package.json
+│   │   └── parse.js
+│   ├── caniuse-lite
+│   │   ├── LICENSE
+│   │   ├── README.md
+│   │   ├── data
+│   │   ├── dist
+│   │   └── package.json
+│   ├── electron-to-chromium
+│   │   ├── LICENSE
+│   │   ├── README.md
+│   │   ├── chromium-versions.js
+│   │   ├── chromium-versions.json
+│   │   ├── full-chromium-versions.js
+│   │   ├── full-chromium-versions.json
+│   │   ├── full-versions.js
+│   │   ├── full-versions.json
+│   │   ├── index.js
+│   │   ├── package.json
+│   │   ├── versions.js
+│   │   └── versions.json
+│   ├── escalade
+│   │   ├── dist
+│   │   ├── index.d.mts
+│   │   ├── index.d.ts
+│   │   ├── license
+│   │   ├── package.json
+│   │   ├── readme.md
+│   │   └── sync
+│   ├── fraction.js
+│   │   ├── CHANGELOG.md
+│   │   ├── LICENSE
+│   │   ├── README.md
+│   │   ├── dist
+│   │   ├── examples
+│   │   ├── fraction.d.mts
+│   │   ├── fraction.d.ts
+│   │   ├── package.json
+│   │   ├── src
+│   │   └── tests
+│   ├── nanoid
+│   │   ├── LICENSE
+│   │   ├── README.md
+│   │   ├── async
+│   │   ├── bin
+│   │   ├── index.browser.cjs
+│   │   ├── index.browser.js
+│   │   ├── index.cjs
+│   │   ├── index.d.cts
+│   │   ├── index.d.ts
+│   │   ├── index.js
+│   │   ├── nanoid.js
+│   │   ├── non-secure
+│   │   ├── package.json
+│   │   └── url-alphabet
+│   ├── node-releases
+│   │   ├── LICENSE
+│   │   ├── README.md
+│   │   ├── data
+│   │   └── package.json
+│   ├── picocolors
+│   │   ├── LICENSE
+│   │   ├── README.md
+│   │   ├── package.json
+│   │   ├── picocolors.browser.js
+│   │   ├── picocolors.d.ts
+│   │   ├── picocolors.js
+│   │   └── types.d.ts
+│   ├── postcss
+│   │   ├── LICENSE
+│   │   ├── README.md
+│   │   ├── lib
+│   │   └── package.json
+│   ├── postcss-value-parser
+│   │   ├── LICENSE
+│   │   ├── README.md
+│   │   ├── lib
+│   │   └── package.json
+│   ├── source-map-js
+│   │   ├── LICENSE
+│   │   ├── README.md
+│   │   ├── lib
+│   │   ├── package.json
+│   │   ├── source-map.d.ts
+│   │   └── source-map.js
+│   ├── tailwindcss
+│   │   ├── LICENSE
+│   │   ├── README.md
+│   │   ├── dist
+│   │   ├── index.css
+│   │   ├── package.json
+│   │   ├── preflight.css
+│   │   ├── theme.css
+│   │   └── utilities.css
+│   └── update-browserslist-db
+│       ├── LICENSE
+│       ├── README.md
+│       ├── check-npm-version.js
+│       ├── cli.js
+│       ├── index.d.ts
+│       ├── index.js
+│       ├── package.json
+│       └── utils.js
+├── notebooks
+├── package-lock.json
+├── package.json
+├── project_notes.md
+├── requirements.txt
+├── results
+│   ├── adversarial_20260503_123852.json
+│   ├── adversarial_20260503_152340.json
+│   ├── adversarial_20260503_210940.json
+│   ├── adversarial_20260505_074526.json
+│   ├── data_poisoning_20260503_144235.json
+│   ├── evasion_20260503_144859.json
+│   ├── model_extraction_20260503_150647.json
+│   ├── prompt_injection_20260503_151457.json
+│   └── prompt_injection_20260503_151537.json
+├── src
+│   ├── __init__.py
+│   ├── __pycache__
+│   │   ├── __init__.cpython-310.pyc
+│   │   └── __init__.cpython-312.pyc
+│   ├── atlas
+│   │   ├── ATLAS.yaml
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   ├── atlas_cli.py
+│   │   ├── atlas_client.py
+│   │   ├── atlas_data.py
+│   │   └── atlas_mapper.py
+│   ├── attacks
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   ├── adversarial.py
+│   │   ├── data_poisoning.py
+│   │   ├── evasion.py
+│   │   ├── model_extraction.py
+│   │   └── prompt_injection.py
+│   ├── defenses
+│   │   ├── __init__.py
+│   │   └── robustness.py
+│   ├── models
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   └── target_model.py
+│   └── utils
+│       ├── __init__.py
+│       ├── __pycache__
+│       ├── logger.py
+│       └── metrics.py
+├── structure
+├── tests
+│   ├── test_attacks.py
+│   └── tests
+│       └── test_attacks.py
+└── webapp
+    ├── __pycache__
+    │   ├── database.cpython-312.pyc
+    │   ├── routes_api.cpython-312.pyc
+    │   ├── routes_prompt_injection.cpython-310.pyc
+    │   └── routes_prompt_injection.cpython-312.pyc
+    ├── app.py
+    ├── database.py
+    ├── routes_api.py
+    ├── routes_prompt_injection.py
+    ├── static
+    │   └── style.css
+    └── templates
+        ├── index.html
+        └── prompt_injection.html
+
+219 directories, 188 files

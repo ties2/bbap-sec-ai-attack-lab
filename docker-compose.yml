@@ -1,19 +1,56 @@
-# ============================================
-# BBAP-Sec AI Attack Lab — Docker Compose
-# ============================================
+# BBAP-Sec AI Security Pentest Platform
+# docker-compose.yml
 
-version: "3.9"
+version: "3.8"
 
 services:
-  lab:
+  # ── Main application ──
+  webapp:
     build: .
-    container_name: bbap-sec-lab
+    container_name: bbap-sec-webapp
     ports:
       - "5000:5000"
     volumes:
+      - ./data:/app/data
       - ./results:/app/results
-      - ./saved_models:/app/saved_models
+      - ./logs:/app/logs
+      - ./datasets:/app/datasets
+      - /var/run/docker.sock:/var/run/docker.sock  # Docker-in-Docker for sandbox management
+      - sandbox-models:/tmp/bbap-sec-models         # Shared model storage
     environment:
-      - FLASK_ENV=production
-      - PYTHONUNBUFFERED=1
+      - FLASK_ENV=development
+      - MODEL_UPLOAD_DIR=/tmp/bbap-sec-models
+      - SANDBOX_IMAGE=bbap-sec-sandbox:latest
+      - SANDBOX_NETWORK=bbap-sec-sandbox-net
+      - SANDBOX_PORT_START=5100
+      - SANDBOX_PORT_END=5200
+      - SANDBOX_TIMEOUT=3600
+      - SANDBOX_MEMORY_LIMIT=4g
+      - SANDBOX_CPU_LIMIT=2.0
+    networks:
+      - bbap-sec-main
+    depends_on:
+      - sandbox-builder
     restart: unless-stopped
+
+  # ── Build sandbox image (one-time) ──
+  sandbox-builder:
+    build:
+      context: ./sandbox
+      dockerfile: Dockerfile
+    image: bbap-sec-sandbox:latest
+    container_name: bbap-sec-sandbox-builder
+    entrypoint: ["echo", "Sandbox image built successfully"]
+    restart: "no"
+
+networks:
+  bbap-sec-main:
+    driver: bridge
+  # Sandbox containers use an internal network (no internet)
+  # Created dynamically by the SandboxManager, not here —
+  # because internal:true networks can't be pre-created
+  # alongside services that need external access.
+
+volumes:
+  sandbox-models:
+    driver: local

@@ -5,12 +5,12 @@ Here is a summarized, formatted log of exactly what we just did. You can copy an
 ### 📝 Project Update: Integrating React Dashboard with Flask Backend
 
 **Objective:**
-Replaced the default Flask/HTML dashboard with a modern React component (`BBAP-Sec-Dashboard.jsx`) while preserving the existing backend API and the option to view the legacy dashboard.
+Replaced the default Flask/HTML dashboard with a modern React component (`BBAP-Sec-Dashboard_v1.jsx`) while preserving the existing backend API and the option to view the legacy dashboard.
 
 #### 1. Frontend Setup & Build (Vite + React)
 *   Initialized a Vite React project in the `frontend/` directory.
-*   Moved the target component to `frontend/src/BBAP-Sec-Dashboard.jsx`.
-*   **Fix:** Updated `App.jsx` to explicitly import with the `.jsx` extension to satisfy Vite's bundler: `import Dashboard from "./BBAP-Sec-Dashboard.jsx";`
+*   Moved the target component to `frontend/src/BBAP-Sec-Dashboard_v1.jsx`.
+*   **Fix:** Updated `App.jsx` to explicitly import with the `.jsx` extension to satisfy Vite's bundler: `import Dashboard from "./BBAP-Sec-Dashboard_v1.jsx";`
 *   **Fix:** Resolved build errors by installing missing third-party dependencies required by the component:
     ```bash
     npm install lucide-react recharts
