@@ -5,15 +5,14 @@
 <h1 align="center">BBAP-Sec AI Attack Lab</h1>
 
 <p align="center">
-  <strong>Educational AI Security Testing Pipeline</strong><br/>
+  <strong>AI Security Testing Pipeline</strong><br/>
   <em>Sponsored &amp; Produced by <a href="#">BBAP-Sec</a></em>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.10%2B-2ecc71?style=for-the-badge&logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/docker-ready-2ecc71?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"/>
-  <img src="https://img.shields.io/badge/license-MIT-d4a843?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/purpose-educational-b87333?style=for-the-badge" alt="Educational"/>
+<img src="https://img.shields.io/badge/Company-BBAP--Sec-003366?style=for-the-badge" alt="BBAP-Sec Company"/>
 </p>
 
 ---

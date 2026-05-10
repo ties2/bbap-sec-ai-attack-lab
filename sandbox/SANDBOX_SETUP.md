@@ -95,7 +95,7 @@ def _create_tables(self):
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             destroyed_at TIMESTAMP,
             error TEXT,
-            FOREIGN KEY (engagement_id) REFERENCES engagements(id)
+            FOREIGN KEY (project_id=1) REFERENCES engagements(id)
         )
     ''')
 ```
