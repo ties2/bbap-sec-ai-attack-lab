@@ -9,9 +9,12 @@ Mount on the main Flask app with:
 
 import os
 import logging
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from werkzeug.utils import secure_filename
 from src.sandbox.manager import SandboxManager
+from webapp.auth import login_required, role_required
+from webapp.security import audit_log
+
 
 logger = logging.getLogger("webapp.sandbox")
 
@@ -45,6 +48,7 @@ def _validate_model_file(filename):
 
 
 @sandbox_bp.route("/create", methods=["POST"])
+@role_required("bbap_admin", "bbap_lead", "bbap_engineer")   # only staff create sandboxes
 def create_sandbox():
     """Create a new sandbox from an uploaded model file.
 
@@ -102,6 +106,20 @@ def create_sandbox():
 
     logger.info(f"Creating sandbox: project={project_id}, file={filename}, framework={framework}, gpu={gpu}")
 
+    # try:
+    #     result = manager.create(
+    #         project_id=project_id,
+    #         model_path=filepath,
+    #         framework=framework,
+    #         gpu=gpu,
+    #     )
+    #     # Clean up the upload copy (manager copies to its own directory)
+    #     os.remove(filepath)
+    #     return jsonify(result), 201
+    # except Exception as e:
+    #     logger.error(f"Sandbox creation failed: {e}")
+    #     os.remove(filepath)
+    #     return jsonify({"error": str(e)}), 500
     try:
         result = manager.create(
             project_id=project_id,
@@ -111,10 +129,21 @@ def create_sandbox():
         )
         # Clean up the upload copy (manager copies to its own directory)
         os.remove(filepath)
+
+        # AUDIT LOG — add here, after success, before return
+        audit_log("SANDBOX_CREATE",
+                  user=g.current_user.get("email"),
+                  ip=request.remote_addr,
+                  detail=f"sandbox={result.get('id')} project={project_id} model={filename}")
+
         return jsonify(result), 201
     except Exception as e:
         logger.error(f"Sandbox creation failed: {e}")
         os.remove(filepath)
+        audit_log("SANDBOX_CREATE_FAILED",
+                  user=g.current_user.get("email"),
+                  ip=request.remote_addr,
+                  detail=f"project={project_id} error={str(e)}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -129,6 +158,7 @@ def sandbox_status(sandbox_id):
 
 
 @sandbox_bp.route("/<int:sandbox_id>", methods=["DELETE"])
+@role_required("bbap_admin", "bbap_lead", "bbap_engineer")   # ADD
 def destroy_sandbox(sandbox_id):
     """Stop and remove a sandbox."""
     manager = get_manager()
@@ -148,6 +178,7 @@ def list_sandboxes():
 
 
 @sandbox_bp.route("/<int:sandbox_id>/predict", methods=["POST"])
+@login_required                          # ADD — any authed user can query
 def sandbox_predict(sandbox_id):
     """Forward a prediction request to the sandbox.
 

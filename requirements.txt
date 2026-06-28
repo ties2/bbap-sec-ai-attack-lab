@@ -20,6 +20,8 @@ tokenizers>=0.15.0
 flask>=3.0.0
 flask-cors>=4.0.0
 
+flask-limiter
+
 # Data & Visualization
 pandas>=2.1.0
 matplotlib>=3.8.0
@@ -46,3 +48,4 @@ torch
 tensorflow
 tensorflow-metal
 docker>=7.0
+

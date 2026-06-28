@@ -15,6 +15,7 @@ import sys
 import threading
 from pathlib import Path
 from flask import Blueprint, jsonify, request
+from webapp.auth import login_required, role_required
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from webapp.database import (
@@ -22,7 +23,7 @@ from webapp.database import (
     get_pipeline, toggle_check, update_check,
     save_result, get_results,
     create_alert, get_alerts, acknowledge_alert, acknowledge_all_alerts,
-    create_user, list_users, update_user, delete_user,
+    create_user, get_all_users, update_user, delete_user,
     create_note, list_notes, update_note, delete_note,
     get_dashboard_stats,
 )
@@ -38,13 +39,15 @@ def register_api_routes(app):
 # ══════════════════════════════════
 #  PROJECTS
 # ══════════════════════════════════
-
+# Reads can stay @login_required (all authed users)
 @bp.route("/projects", methods=["GET"])
+@login_required
 def api_list_projects():
     return jsonify(list_projects())
 
-
+# Project create/update/delete — staff only
 @bp.route("/projects", methods=["POST"])
+@role_required("bbap_admin", "bbap_lead", "bbap_engineer")   # ADD
 def api_create_project():
     d = request.get_json(force=True)
     name = d.get("name", "").strip()
@@ -75,6 +78,7 @@ def api_update_project(pid):
 
 
 @bp.route("/projects/<int:pid>", methods=["DELETE"])
+@role_required("bbap_admin", "bbap_lead")
 def api_delete_project(pid):
     delete_project(pid)
     return jsonify({"status": "deleted"})
@@ -316,7 +320,7 @@ def api_ack_all():
 
 @bp.route("/users", methods=["GET"])
 def api_list_users():
-    return jsonify(list_users())
+    return jsonify(get_all_users())
 
 
 @bp.route("/users", methods=["POST"])

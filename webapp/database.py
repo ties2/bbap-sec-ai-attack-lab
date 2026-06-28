@@ -2,7 +2,7 @@
 BBAP-Sec AI Attack Lab — Database Layer
 ========================================
 SQLite persistence for projects, pipeline checks, attack results,
-alerts, users, and knowledge base notes.
+alerts, users, sandboxes, groups, and project members.
 """
 
 import sqlite3
@@ -79,17 +79,6 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now'))
         );
 
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT UNIQUE NOT NULL,
-            role TEXT DEFAULT 'viewer',
-            status TEXT DEFAULT 'active',
-            mfa INTEGER DEFAULT 0,
-            last_login TEXT DEFAULT '',
-            created_at TEXT DEFAULT (datetime('now'))
-        );
-
         CREATE TABLE IF NOT EXISTS notes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
@@ -99,30 +88,62 @@ def init_db():
             pinned INTEGER DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now'))
         );
-         CREATE TABLE IF NOT EXISTS sandboxes (
-             id INTEGER PRIMARY KEY AUTOINCREMENT,
-             project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-             container_id TEXT,
-             status TEXT DEFAULT 'creating',
-             framework TEXT,
-             model_filename TEXT,
-             model_size_bytes INTEGER,
-             port INTEGER,
-             gpu_enabled INTEGER DEFAULT 0,
-             created_at TEXT DEFAULT (datetime('now')),
-             destroyed_at TEXT,
-             error TEXT
-         );
-        """)
 
-        # Seed default admin if no users exist
-        count = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-        if count == 0:
-            db.execute("INSERT INTO users (name, email, role, status, mfa) VALUES (?, ?, ?, ?, ?)",
-                       ("Admin User", "admin@bbap-sec.io", "admin", "active", 1))
+        CREATE TABLE IF NOT EXISTS sandboxes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            container_id TEXT,
+            status TEXT DEFAULT 'creating',
+            framework TEXT,
+            model_filename TEXT,
+            model_size_bytes INTEGER,
+            port INTEGER,
+            gpu_enabled INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now')),
+            destroyed_at TEXT,
+            error TEXT
+        );
+
+        -- Auth: users with password hash and role-based access
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL DEFAULT '',
+            role TEXT NOT NULL DEFAULT 'client_viewer',
+            group_name TEXT DEFAULT '',
+            active INTEGER DEFAULT 1,
+            last_login TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+
+        -- Client groups (companies)
+        CREATE TABLE IF NOT EXISTS groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            description TEXT DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+
+        -- Project member assignments with per-user section permissions
+        CREATE TABLE IF NOT EXISTS project_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            role TEXT DEFAULT 'viewer',
+            allowed_sections TEXT,
+            assigned_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(project_id, user_id)
+        );
+
+        -- Seed default group
+        INSERT OR IGNORE INTO groups (id, name, description)
+        VALUES (1, 'BBAP-Sec', 'BBAP-Sec internal team');
+        """)
 
 
 # ── Helper: dict from Row ──
+
 def row_to_dict(row):
     if row is None:
         return None
@@ -148,7 +169,6 @@ def create_project(name, description="", dataset="mnist", architecture="simple_c
 
 
 def _init_pipeline_checks(db, project_id):
-    """Seed default pipeline checks for a new project."""
     stages = {
         "data_ingestion": ["Schema validation", "Poison detection", "Source auth", "Integrity hash",
                            "Outlier detection", "Format check", "Volume anomaly", "PII scan",
@@ -200,11 +220,9 @@ def delete_project(project_id):
 # ══════════════════════════════════
 
 def get_pipeline(project_id):
-    """Get pipeline checks grouped by stage."""
     with get_db() as db:
         rows = rows_to_list(db.execute(
             "SELECT * FROM pipeline_checks WHERE project_id = ? ORDER BY stage, id", (project_id,)).fetchall())
-
     stages = {}
     for r in rows:
         s = r["stage"]
@@ -214,7 +232,6 @@ def get_pipeline(project_id):
         stages[s]["total"] += 1
         if r["passed"]:
             stages[s]["passed"] += 1
-
     return list(stages.values())
 
 
@@ -288,22 +305,34 @@ def acknowledge_all_alerts(project_id=None):
 
 
 # ══════════════════════════════════
-#  USERS
+#  USERS (Auth)
 # ══════════════════════════════════
 
-def create_user(name, email, role="viewer"):
+def create_user(name, email, password_hash, role="client_viewer", group_name=""):
     with get_db() as db:
-        db.execute("INSERT INTO users (name, email, role) VALUES (?, ?, ?)", (name, email, role))
-        return db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        cur = db.execute(
+            "INSERT INTO users (name, email, password_hash, role, group_name) VALUES (?, ?, ?, ?, ?)",
+            (name, email.lower(), password_hash, role, group_name))
+        return cur.lastrowid
 
 
-def list_users():
+def get_user(user_id):
     with get_db() as db:
-        return rows_to_list(db.execute("SELECT * FROM users ORDER BY created_at").fetchall())
+        return row_to_dict(db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone())
+
+
+def get_user_by_email(email):
+    with get_db() as db:
+        return row_to_dict(db.execute("SELECT * FROM users WHERE email = ?", (email.lower(),)).fetchone())
+
+
+def get_all_users():
+    with get_db() as db:
+        return rows_to_list(db.execute("SELECT * FROM users ORDER BY created_at DESC").fetchall())
 
 
 def update_user(user_id, **kwargs):
-    allowed = {"name", "email", "role", "status", "mfa"}
+    allowed = {"name", "role", "group_name", "active"}
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if not fields:
         return
@@ -313,9 +342,90 @@ def update_user(user_id, **kwargs):
         db.execute(f"UPDATE users SET {sets} WHERE id = ?", vals)
 
 
+def update_user_password(user_id, password_hash):
+    with get_db() as db:
+        db.execute("UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id))
+
+
+def update_user_last_login(user_id):
+    with get_db() as db:
+        db.execute("UPDATE users SET last_login = ? WHERE id = ?",
+                    (datetime.now().isoformat(), user_id))
+
+
 def delete_user(user_id):
     with get_db() as db:
-        db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        db.execute("UPDATE users SET active = 0 WHERE id = ?", (user_id,))
+
+
+# ══════════════════════════════════
+#  GROUPS
+# ══════════════════════════════════
+
+def get_groups():
+    with get_db() as db:
+        rows = rows_to_list(db.execute("SELECT * FROM groups ORDER BY name").fetchall())
+        for g in rows:
+            g["member_count"] = db.execute(
+                "SELECT COUNT(*) FROM users WHERE group_name = ?", (g["name"],)
+            ).fetchone()[0]
+        return rows
+
+
+def create_group(name, description=""):
+    with get_db() as db:
+        cur = db.execute("INSERT INTO groups (name, description) VALUES (?, ?)", (name, description))
+        return cur.lastrowid
+
+
+# ══════════════════════════════════
+#  PROJECT MEMBERS
+# ══════════════════════════════════
+
+def get_project_members(project_id):
+    with get_db() as db:
+        rows = db.execute("""
+            SELECT pm.*, u.name, u.email, u.role as user_role, u.group_name
+            FROM project_members pm
+            JOIN users u ON pm.user_id = u.id
+            WHERE pm.project_id = ?
+            ORDER BY pm.assigned_at
+        """, (project_id,)).fetchall()
+        return rows_to_list(rows)
+
+
+def assign_project_member(project_id, user_id, role="viewer", allowed_sections=None):
+    sections_json = json.dumps(allowed_sections) if allowed_sections else None
+    with get_db() as db:
+        db.execute("""
+            INSERT OR REPLACE INTO project_members (project_id, user_id, role, allowed_sections)
+            VALUES (?, ?, ?, ?)
+        """, (project_id, user_id, role, sections_json))
+
+
+def remove_project_member(project_id, user_id):
+    with get_db() as db:
+        db.execute("DELETE FROM project_members WHERE project_id = ? AND user_id = ?",
+                    (project_id, user_id))
+
+
+def set_project_permissions(project_id, user_id, sections):
+    with get_db() as db:
+        db.execute("""
+            UPDATE project_members SET allowed_sections = ?
+            WHERE project_id = ? AND user_id = ?
+        """, (json.dumps(sections), project_id, user_id))
+
+
+def get_user_project_permissions(project_id, user_id):
+    with get_db() as db:
+        row = db.execute("""
+            SELECT allowed_sections FROM project_members
+            WHERE project_id = ? AND user_id = ?
+        """, (project_id, user_id)).fetchone()
+        if row and row["allowed_sections"]:
+            return json.loads(row["allowed_sections"])
+        return None
 
 
 # ══════════════════════════════════
@@ -361,7 +471,47 @@ def delete_note(note_id):
         db.execute("DELETE FROM notes WHERE id = ?", (note_id,))
 
 
-# ── Dashboard Stats ──
+# ══════════════════════════════════
+#  SANDBOXES
+# ══════════════════════════════════
+
+def save_sandbox(sandbox_dict):
+    with get_db() as db:
+        db.execute(
+            """INSERT INTO sandboxes (id, project_id, container_id, status,
+                framework, model_filename, model_size_bytes, port, gpu_enabled)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (sandbox_dict.get("id"), sandbox_dict.get("project_id"),
+             sandbox_dict.get("container_id"), sandbox_dict.get("status"),
+             sandbox_dict.get("framework"), sandbox_dict.get("model_filename"),
+             sandbox_dict.get("model_size_bytes"), sandbox_dict.get("port"),
+             1 if sandbox_dict.get("gpu_enabled") else 0))
+
+
+def update_sandbox_status(sandbox_id, status):
+    with get_db() as db:
+        db.execute("UPDATE sandboxes SET status = ?, destroyed_at = datetime('now') WHERE id = ?",
+                    (status, sandbox_id))
+
+
+def get_sandboxes(project_id=None):
+    with get_db() as db:
+        if project_id:
+            rows = db.execute("SELECT * FROM sandboxes WHERE project_id = ? ORDER BY created_at DESC",
+                              (project_id,)).fetchall()
+        else:
+            rows = db.execute("SELECT * FROM sandboxes ORDER BY created_at DESC").fetchall()
+        return rows_to_list(rows)
+
+
+def delete_sandbox_record(sandbox_id):
+    with get_db() as db:
+        db.execute("DELETE FROM sandboxes WHERE id = ?", (sandbox_id,))
+
+
+# ══════════════════════════════════
+#  DASHBOARD STATS
+# ══════════════════════════════════
 
 def get_dashboard_stats(project_id=None):
     with get_db() as db:
@@ -378,7 +528,7 @@ def get_dashboard_stats(project_id=None):
             unack_alerts = db.execute("SELECT COUNT(*) FROM alerts WHERE acknowledged = 0").fetchone()[0]
             total_results = db.execute("SELECT COUNT(*) FROM attack_results").fetchone()[0]
 
-        total_users = db.execute("SELECT COUNT(*) FROM users WHERE status = 'active'").fetchone()[0]
+        total_users = db.execute("SELECT COUNT(*) FROM users WHERE active = 1").fetchone()[0]
         health = round(passed_checks / total_checks * 100) if total_checks > 0 else 0
 
         return {
@@ -390,43 +540,3 @@ def get_dashboard_stats(project_id=None):
             "total_results": total_results,
             "active_users": total_users,
         }
-# ══════════════════════════════════
-#  SANDBOXES
-# ══════════════════════════════════
-
-def save_sandbox(sandbox_dict):
-    with get_db() as db:
-        db.execute(
-            '''INSERT INTO sandboxes (id, project_id, container_id, status,
-                                      framework, model_filename, model_size_bytes, port, gpu_enabled)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-            (sandbox_dict.get('id'), sandbox_dict.get('project_id'),
-             sandbox_dict.get('container_id'), sandbox_dict.get('status'),
-             sandbox_dict.get('framework'), sandbox_dict.get('model_filename'),
-             sandbox_dict.get('model_size_bytes'), sandbox_dict.get('port'),
-             1 if sandbox_dict.get('gpu_enabled') else 0)
-        )
-
-def update_sandbox_status(sandbox_id, status):
-    with get_db() as db:
-        db.execute(
-            "UPDATE sandboxes SET status = ?, destroyed_at = datetime('now') WHERE id = ?",
-            (status, sandbox_id)
-        )
-
-def get_sandboxes(project_id=None):
-    with get_db() as db:
-        if project_id:
-            rows = db.execute(
-                "SELECT * FROM sandboxes WHERE project_id = ? ORDER BY created_at DESC",
-                (project_id,)
-            ).fetchall()
-        else:
-            rows = db.execute(
-                "SELECT * FROM sandboxes ORDER BY created_at DESC"
-            ).fetchall()
-        return rows_to_list(rows)
-
-def delete_sandbox_record(sandbox_id):
-    with get_db() as db:
-        db.execute("DELETE FROM sandboxes WHERE id = ?", (sandbox_id,))

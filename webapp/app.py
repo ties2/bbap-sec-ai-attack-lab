@@ -14,7 +14,6 @@ import json, os, subprocess, threading
 from pathlib import Path
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request, send_from_directory
-from flask_cors import CORS
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -23,25 +22,45 @@ from src.utils.logger import setup_logger, get_logger, get_project_root
 setup_logger(get_project_root())
 logger = get_logger("webapp")
 
+from webapp.routes_attacks import attacks_bp, init_attack_runner
+from webapp.routes_sandbox import sandbox_bp, get_manager
+from webapp.security import configure_security, setup_rate_limiting, audit_log
 
 app = Flask(__name__)
-CORS(app)
+
+# ── Phase A security (configure_security sets restricted CORS — do NOT call CORS(app) separately) ──
+configure_security(app)
+limiter = setup_rate_limiting(app)
+
+# ── Auth blueprints (REQUIRED for login + team) ──
+from webapp.routes_auth import auth_bp, team_bp
+app.register_blueprint(auth_bp)
+app.register_blueprint(team_bp)
+# Note: routes_auth uses `import webapp.database as db` directly — no init_auth needed.
+
+# ── Attack + sandbox blueprints ──
+app.register_blueprint(sandbox_bp)
+app.register_blueprint(attacks_bp)
+init_attack_runner(sandbox_manager=get_manager())
+
+# ── Rate limits on sensitive blueprints (Priority 4) ──
+if limiter:
+    # Brute-force protection on login
+    limiter.limit("5 per minute")(auth_bp)
+    # Expensive operations
+    limiter.limit("10 per minute")(attacks_bp)
+    limiter.limit("5 per minute")(sandbox_bp)
+    logger.info("Rate limits applied: auth=5/min, attacks=10/min, sandbox=5/min")
 
 # ── React build directory ──
 REACT_BUILD_DIR = Path(get_project_root()) / "frontend" / "dist"
 
-# ── Register blueprints ──
-
-# Prompt Injection simulation routes
+# ── Other blueprints ──
 from webapp.routes_prompt_injection import register_prompt_injection_routes
 register_prompt_injection_routes(app)
 
-# Project management + attack API routes (v2)
 from webapp.routes_api import register_api_routes
 register_api_routes(app)
-
-from webapp.routes_sandbox import sandbox_bp
-app.register_blueprint(sandbox_bp)
 
 RESULTS_DIR = Path("results")
 RESULTS_DIR.mkdir(exist_ok=True)

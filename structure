@@ -2,7 +2,14 @@
 ├── Dockerfile
 ├── README.md
 ├── archive
+│   ├── BBAP-Sec-Dashboard-v4.jsx
+│   ├── BBAP-Sec-Dashboard-v7.jsx
 │   ├── BBAP-Sec-Dashboard_v1.jsx
+│   ├── BBAP-Sec-Dashboard_v2.jsx
+│   ├── BBAP-Sec-Dashboard_v3.jsx
+│   ├── BBAP-Sec-Dashboard_v5.jsx
+│   ├── BBAP-Sec-Dashboard_v6.jsx
+│   ├── INTEGRATION_GUIDE.md
 │   ├── app.py
 │   ├── favicon.svg
 │   └── icons.svg
@@ -23,6 +30,7 @@
 │   │   └── cifar-10-batches-py
 │   └── download_datasets.py
 ├── doc
+│   ├── PHASE1_GUIDE.md
 │   ├── ai-risk-management
 │   │   ├── README.md
 │   │   ├── compliance-mapping.md
@@ -194,7 +202,6 @@
 │   │   ├── App.css
 │   │   ├── App.jsx
 │   │   ├── BBAP-Sec-Dashboard.jsx
-│   │   ├── BBAP-Sec-Dashboard_v2.jsx
 │   │   ├── assets
 │   │   ├── components
 │   │   ├── index.css
@@ -211,6 +218,9 @@
 │   ├── system.log
 │   ├── target_model.log
 │   └── webapp.log
+├── model
+├── models
+│   └── resnet50.pt
 ├── node_modules
 │   ├── autoprefixer
 │   │   ├── LICENSE
@@ -352,6 +362,12 @@
 │   ├── model_extraction_20260503_150647.json
 │   ├── prompt_injection_20260503_151457.json
 │   └── prompt_injection_20260503_151537.json
+├── sandbox
+│   ├── Dockerfile
+│   ├── SANDBOX_SETUP.md
+│   ├── model_loader.py
+│   ├── requirements.txt
+│   └── sandbox_api.py
 ├── src
 │   ├── __init__.py
 │   ├── __pycache__
@@ -371,8 +387,10 @@
 │   │   ├── adversarial.py
 │   │   ├── data_poisoning.py
 │   │   ├── evasion.py
+│   │   ├── implementations.py
 │   │   ├── model_extraction.py
-│   │   └── prompt_injection.py
+│   │   ├── prompt_injection.py
+│   │   └── runner.py
 │   ├── defenses
 │   │   ├── __init__.py
 │   │   └── robustness.py
@@ -380,30 +398,41 @@
 │   │   ├── __init__.py
 │   │   ├── __pycache__
 │   │   └── target_model.py
+│   ├── sandbox
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   └── manager.py
 │   └── utils
 │       ├── __init__.py
 │       ├── __pycache__
 │       ├── logger.py
 │       └── metrics.py
 ├── structure
+├── test_attack_runner.py
+├── test_predict.py
 ├── tests
 │   ├── test_attacks.py
 │   └── tests
 │       └── test_attacks.py
 └── webapp
     ├── __pycache__
+    │   ├── app.cpython-312.pyc
     │   ├── database.cpython-312.pyc
     │   ├── routes_api.cpython-312.pyc
+    │   ├── routes_attacks.cpython-312.pyc
     │   ├── routes_prompt_injection.cpython-310.pyc
-    │   └── routes_prompt_injection.cpython-312.pyc
+    │   ├── routes_prompt_injection.cpython-312.pyc
+    │   └── routes_sandbox.cpython-312.pyc
     ├── app.py
     ├── database.py
     ├── routes_api.py
+    ├── routes_attacks.py
     ├── routes_prompt_injection.py
+    ├── routes_sandbox.py
     ├── static
     │   └── style.css
     └── templates
         ├── index.html
         └── prompt_injection.html
 
-219 directories, 188 files
+224 directories, 212 files
