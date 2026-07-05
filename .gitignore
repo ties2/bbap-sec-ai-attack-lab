@@ -66,6 +66,8 @@ datasets/*.zip
 results/
 reports/
 *.log
+logs/airflow-monitoring/
+orchestration/airflow/logs/
 
 # ---------- Docker ----------
 docker-compose.override.yml

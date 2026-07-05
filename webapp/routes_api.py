@@ -16,6 +16,7 @@ import sys
 import threading
 from pathlib import Path
 
+import requests
 from flask import Blueprint, g, jsonify, request
 
 from webapp.auth import decode_token, login_required, role_required
@@ -483,14 +484,166 @@ def api_delete_user(uid):
 
 
 # ══════════════════════════════════
+#  MONITORING (Airflow integration)
+# ══════════════════════════════════
+
+
+def _airflow_api_base() -> str:
+    return os.environ.get("AIRFLOW_API_BASE", "http://127.0.0.1:8081/api/v1").rstrip(
+        "/"
+    )
+
+
+def _airflow_auth() -> tuple[str, str]:
+    user = os.environ.get("AIRFLOW_USERNAME", "airflow")
+    pw = os.environ.get("AIRFLOW_PASSWORD", "airflow")
+    return user, pw
+
+
+def _airflow_monitor_file() -> Path:
+    return Path(
+        os.environ.get(
+            "AIRFLOW_MONITOR_FILE",
+            "logs/airflow-monitoring/bbap_monitoring_latest.json",
+        )
+    )
+
+
+def _airflow_events_file() -> Path:
+    return Path(
+        os.environ.get(
+            "AIRFLOW_EVENTS_FILE",
+            "logs/airflow-monitoring/bbap_monitoring_events.jsonl",
+        )
+    )
+
+
+def _airflow_get(path: str) -> tuple[dict, int]:
+    try:
+        r = requests.get(
+            f"{_airflow_api_base()}{path}",
+            auth=_airflow_auth(),
+            timeout=8,
+        )
+        return (r.json() if r.content else {}), r.status_code
+    except Exception as e:
+        return {"error": str(e)}, 0
+
+
+def _airflow_post(path: str, payload: dict) -> tuple[dict, int]:
+    try:
+        r = requests.post(
+            f"{_airflow_api_base()}{path}",
+            auth=_airflow_auth(),
+            json=payload,
+            timeout=10,
+        )
+        return (r.json() if r.content else {}), r.status_code
+    except Exception as e:
+        return {"error": str(e)}, 0
+
+
+@bp.route("/monitoring/airflow/overview", methods=["GET"])
+@login_required
+def api_monitoring_airflow_overview():
+    health_data, health_code = _airflow_get("/health")
+    dag_id = os.environ.get("AIRFLOW_MONITOR_DAG_ID", "bbap_sec_monitoring")
+    dag_data, dag_code = _airflow_get(f"/dags/{dag_id}")
+    runs_data, runs_code = _airflow_get(
+        f"/dags/{dag_id}/dagRuns?limit=10&order_by=-logical_date"
+    )
+
+    latest_file = _airflow_monitor_file()
+    latest_snapshot = None
+    latest_error = ""
+    if latest_file.exists():
+        try:
+            latest_snapshot = json.loads(latest_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            latest_error = str(e)
+
+    return jsonify(
+        {
+            "configured": True,
+            "airflow": {
+                "api_base": _airflow_api_base(),
+                "reachable": health_code in (200, 401, 403),
+                "health": health_data,
+                "dag": dag_data if dag_code == 200 else None,
+                "runs": runs_data.get("dag_runs", []) if runs_code == 200 else [],
+                "errors": {
+                    "health": health_data.get("error") if health_code == 0 else None,
+                    "dag": dag_data.get("error") if dag_code == 0 else None,
+                    "runs": runs_data.get("error") if runs_code == 0 else None,
+                },
+            },
+            "latest_snapshot": latest_snapshot,
+            "latest_snapshot_error": latest_error,
+        }
+    )
+
+
+@bp.route("/monitoring/airflow/events", methods=["GET"])
+@login_required
+def api_monitoring_airflow_events():
+    limit = request.args.get("limit", 30, type=int)
+    limit = min(max(limit or 30, 1), 200)
+
+    events_file = _airflow_events_file()
+    if not events_file.exists():
+        return jsonify({"events": [], "count": 0})
+
+    events = []
+    try:
+        with events_file.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    events.append(json.loads(line))
+                except Exception:
+                    continue
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    trimmed = list(reversed(events[-limit:]))
+    return jsonify({"events": trimmed, "count": len(trimmed)})
+
+
+@bp.route("/monitoring/airflow/trigger", methods=["POST"])
+@role_required("bbap_admin", "bbap_lead", "bbap_engineer")
+def api_monitoring_airflow_trigger():
+    dag_id = os.environ.get("AIRFLOW_MONITOR_DAG_ID", "bbap_sec_monitoring")
+    payload = request.get_json(silent=True) or {}
+    conf = payload.get("conf") or {}
+
+    body = {"conf": conf}
+    out, code = _airflow_post(f"/dags/{dag_id}/dagRuns", body)
+
+    if code not in (200, 201):
+        return (
+            jsonify(
+                {
+                    "error": "Failed to trigger DAG",
+                    "status_code": code,
+                    "details": out,
+                }
+            ),
+            502,
+        )
+
+    return jsonify({"status": "triggered", "dag_id": dag_id, "run": out}), 201
+
+
+# ══════════════════════════════════
 #  NOTES (Knowledge Base)
 # ══════════════════════════════════
 
 
-@bp.route("/notes", methods=["GET"])
+@bp.route("/projects/<int:pid>/notes", methods=["GET"])
 @login_required
-def api_list_notes():
-    pid = request.args.get("project_id", type=int)
+def api_list_notes(pid):
     return jsonify(list_notes(pid))
 
 

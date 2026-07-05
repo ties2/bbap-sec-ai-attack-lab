@@ -3221,161 +3221,237 @@ function GovernancePage({ project }) {
    MONITORING PAGE
    ═══════════════════════════════════ */
 function MonitoringPage() {
+  const [overview, setOverview] = useState(null);
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [triggering, setTriggering] = useState(false);
+  const [err, setErr] = useState("");
+
+  const load = async () => {
+    try {
+      const [o, e] = await Promise.all([
+        api.get("/monitoring/airflow/overview"),
+        api.get("/monitoring/airflow/events?limit=20"),
+      ]);
+      if (o?.error) throw new Error(o.error);
+      if (e?.error) throw new Error(e.error);
+      setOverview(o);
+      setEvents(e.events || []);
+      setErr("");
+    } catch (e) {
+      setErr(e.message || "Failed to load monitoring data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 20000);
+    return () => clearInterval(t);
+  }, []);
+
+  const triggerNow = async () => {
+    setTriggering(true);
+    try {
+      const d = await api.post("/monitoring/airflow/trigger", {});
+      if (d?.error) throw new Error(d.error);
+      await load();
+    } catch (e) {
+      setErr(e.message || "Failed to trigger monitoring DAG");
+    } finally {
+      setTriggering(false);
+    }
+  };
+
+  const latest = overview?.latest_snapshot || {};
+  const derived = latest?.derived || {};
+  const airflow = overview?.airflow || {};
+  const lastRun = (airflow?.runs || [])[0] || null;
+  const runState = lastRun?.state || "unknown";
+
   const metrics = [
     {
-      l: "Queries / min",
-      v: "842",
-      trend: "+12%",
-      dir: "up",
-      status: "normal",
+      l: "Pipeline Health",
+      v:
+        derived.pipeline_health === undefined ||
+        derived.pipeline_health === null
+          ? "—"
+          : `${derived.pipeline_health}%`,
+      trend: derived.pipeline_health >= 80 ? "healthy" : "needs attention",
+      dir: derived.pipeline_health >= 80 ? "up" : "down",
+      status: derived.pipeline_health >= 80 ? "normal" : "warning",
     },
     {
-      l: "Avg Latency",
-      v: "45ms",
-      trend: "-3ms",
-      dir: "down",
-      status: "normal",
+      l: "Active Alerts",
+      v:
+        derived.active_alerts === undefined || derived.active_alerts === null
+          ? "—"
+          : String(derived.active_alerts),
+      trend: derived.active_alerts >= 10 ? "elevated" : "within expected range",
+      dir: derived.active_alerts >= 10 ? "up" : "flat",
+      status: derived.active_alerts >= 10 ? "warning" : "normal",
     },
     {
-      l: "Error Rate",
-      v: "0.02%",
-      trend: "stable",
+      l: "Attack Results",
+      v:
+        derived.total_results === undefined || derived.total_results === null
+          ? "—"
+          : String(derived.total_results),
+      trend: "tracked",
       dir: "flat",
       status: "normal",
     },
     {
-      l: "Blocked Requests",
-      v: "23",
-      trend: "+5 today",
-      dir: "up",
-      status: "warning",
-    },
-    {
-      l: "Model Accuracy",
-      v: "97.8%",
-      trend: "-0.3%",
-      dir: "down",
-      status: "normal",
-    },
-    {
-      l: "Drift Score",
-      v: "0.04",
-      trend: "below threshold",
+      l: "Active Users",
+      v:
+        derived.active_users === undefined || derived.active_users === null
+          ? "—"
+          : String(derived.active_users),
+      trend: "current",
       dir: "flat",
       status: "normal",
     },
-  ];
-
-  const recentEvents = [
     {
-      time: "2 min ago",
-      event: "Rate limit triggered — 5 requests blocked from 192.168.1.42",
-      sev: "warning",
+      l: "Airflow DAG",
+      v: runState,
+      trend: lastRun?.run_id || "no runs",
+      dir:
+        runState === "success" ? "up" : runState === "failed" ? "down" : "flat",
+      status: runState === "failed" ? "warning" : "normal",
     },
     {
-      time: "14 min ago",
-      event: "Model accuracy check passed — 97.8% on validation set",
-      sev: "ok",
-    },
-    {
-      time: "1 hr ago",
-      event: "Drift score computed — 0.04 (threshold: 0.1)",
-      sev: "ok",
-    },
-    {
-      time: "3 hr ago",
-      event: "Sandbox bbap-sbx-001 health check passed",
-      sev: "ok",
-    },
-    {
-      time: "5 hr ago",
-      event: "Unusual query pattern detected — 340 sequential requests",
-      sev: "warning",
+      l: "Collection Time",
+      v: latest?.collected_at ? "updated" : "—",
+      trend: latest?.collected_at || "no snapshot",
+      dir: "flat",
+      status: "normal",
     },
   ];
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold text-white mb-0.5">Monitoring</h1>
-        <p className="text-sm text-white/35">
-          Real-time system metrics and activity tracking
-        </p>
-      </div>
-
-      <div className="grid grid-cols-3 gap-3">
-        {metrics.map((m) => {
-          const DirIcon =
-            m.dir === "up"
-              ? TrendingUp
-              : m.dir === "down"
-                ? TrendingDown
-                : Minus;
-          return (
-            <div key={m.l} className={`${G} rounded-lg p-4`}>
-              <div className="text-[9px] text-white/25 uppercase tracking-wider mb-2">
-                {m.l}
-              </div>
-              <div className="text-xl font-semibold text-white/90 mb-1">
-                {m.v}
-              </div>
-              <div
-                className={`flex items-center gap-1.5 text-[10px] font-mono ${m.status === "warning" ? "text-amber-400" : "text-white/30"}`}
-              >
-                <DirIcon size={11} />
-                {m.trend}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className={`${G} rounded-lg p-5`}>
-        <div className="text-[9px] font-semibold text-white/25 uppercase tracking-widest mb-3">
-          Recent events
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-white mb-0.5">
+            Monitoring
+          </h1>
+          <p className="text-sm text-white/35">
+            Apache Airflow orchestration + BBAP health checks
+          </p>
         </div>
-        <div className="space-y-2">
-          {recentEvents.map((e, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-md bg-white/[0.02]"
+        <div className="flex items-center gap-2">
+          <button
+            onClick={load}
+            className="px-3 py-2 rounded-md bg-white/[0.06] text-white text-[11px]"
+          >
+            Refresh
+          </button>
+          <button
+            onClick={triggerNow}
+            disabled={triggering}
+            className="px-3 py-2 rounded-md bg-emerald-600 text-white text-[11px] disabled:opacity-40 flex items-center gap-1.5"
+          >
+            {triggering ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <Play size={12} />
+            )}
+            Run DAG now
+          </button>
+        </div>
+      </div>
+
+      {err && (
+        <div className="px-3 py-2 rounded-md bg-red-500/10 border border-red-500/20 text-[11px] text-red-300">
+          {err}
+        </div>
+      )}
+
+      {loading ? (
+        <div className={`${G} rounded-lg p-5 text-[11px] text-white/40`}>
+          Loading monitoring data...
+        </div>
+      ) : (
+        <>
+          <div
+            className={`${G} rounded-lg p-3 flex items-center gap-3 text-[10px]`}
+          >
+            <span
+              className={`font-mono ${airflow?.reachable ? "text-emerald-400" : "text-red-400"}`}
             >
-              <div
-                className={`w-1.5 h-1.5 rounded-full shrink-0 ${e.sev === "warning" ? "bg-amber-400" : "bg-emerald-400"}`}
-              />
-              <span className="text-[10px] font-mono text-white/20 w-20 shrink-0">
-                {e.time}
-              </span>
-              <span className="text-[10px] text-white/55 flex-1">
-                {e.event}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
+              Airflow API {airflow?.reachable ? "reachable" : "unreachable"}
+            </span>
+            <span className="text-white/35">
+              DAG: {airflow?.dag?.dag_id || "bbap_sec_monitoring"}
+            </span>
+            <span className="text-white/25">
+              Last run: {lastRun?.logical_date || "—"}
+            </span>
+          </div>
 
-      <div className={`${G} rounded-lg p-5`}>
-        <div className="text-[9px] font-semibold text-white/25 uppercase tracking-widest mb-3">
-          Active sandbox resources
-        </div>
-        <div className="grid grid-cols-4 gap-4">
-          {[
-            { l: "CPU", v: "24%", c: "text-emerald-400" },
-            { l: "Memory", v: "1.2 GB", c: "text-blue-400" },
-            { l: "GPU", v: "38%", c: "text-violet-400" },
-            { l: "Disk", v: "840 MB", c: "text-amber-400" },
-          ].map((r) => (
-            <div key={r.l}>
-              <div className="text-[9px] text-white/20 uppercase tracking-wider">
-                {r.l}
-              </div>
-              <div className={`text-lg font-semibold font-mono ${r.c} mt-1`}>
-                {r.v}
-              </div>
+          <div className="grid grid-cols-3 gap-3">
+            {metrics.map((m) => {
+              const DirIcon =
+                m.dir === "up"
+                  ? TrendingUp
+                  : m.dir === "down"
+                    ? TrendingDown
+                    : Minus;
+              return (
+                <div key={m.l} className={`${G} rounded-lg p-4`}>
+                  <div className="text-[9px] text-white/25 uppercase tracking-wider mb-2">
+                    {m.l}
+                  </div>
+                  <div className="text-xl font-semibold text-white/90 mb-1">
+                    {m.v}
+                  </div>
+                  <div
+                    className={`flex items-center gap-1.5 text-[10px] font-mono ${m.status === "warning" ? "text-amber-400" : "text-white/30"}`}
+                  >
+                    <DirIcon size={11} />
+                    {m.trend}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className={`${G} rounded-lg p-5`}>
+            <div className="text-[9px] font-semibold text-white/25 uppercase tracking-widest mb-3">
+              Airflow monitoring events
             </div>
-          ))}
-        </div>
-      </div>
+            <div className="space-y-2 max-h-[280px] overflow-y-auto">
+              {events.length === 0 && (
+                <div className="text-[10px] text-white/35">
+                  No events yet. Trigger DAG run to generate snapshot.
+                </div>
+              )}
+              {events.map((e, i) => {
+                const sev = e.status === "ok" ? "ok" : "warning";
+                return (
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-md bg-white/[0.02]"
+                  >
+                    <div
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${sev === "warning" ? "bg-amber-400" : "bg-emerald-400"}`}
+                    />
+                    <span className="text-[10px] font-mono text-white/20 w-44 shrink-0">
+                      {e.collected_at || "—"}
+                    </span>
+                    <span className="text-[10px] text-white/55 flex-1">
+                      {e.status === "ok"
+                        ? `Monitoring snapshot OK (alerts: ${e?.derived?.active_alerts ?? "—"}, health: ${e?.derived?.pipeline_health ?? "—"}%)`
+                        : `Degraded snapshot: ${(e.errors || []).join(" | ") || "unknown issue"}`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

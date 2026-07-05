@@ -177,6 +177,32 @@ Optional LLM backend for generated answers (otherwise retrieval-only fallback):
 - `BBAP_KB_OLLAMA_HOST=http://localhost:11434`
 - `BBAP_KB_OLLAMA_MODEL=llama3.1`
 
+### Apache Airflow Monitoring (strong orchestration)
+
+This repo includes an Airflow DAG (`bbap_sec_monitoring`) that runs every 5 minutes,
+collects BBAP API health snapshots, evaluates guardrails, and writes events to:
+- `logs/airflow-monitoring/bbap_monitoring_latest.json`
+- `logs/airflow-monitoring/bbap_monitoring_events.jsonl`
+
+Start Airflow stack (in addition to webapp):
+
+```bash
+docker compose --profile airflow up -d airflow-db airflow-init airflow-webserver airflow-scheduler
+```
+
+Airflow UI:
+- `http://127.0.0.1:8081`
+- default creds: `airflow` / `airflow` (override with `AIRFLOW_USERNAME` / `AIRFLOW_PASSWORD`)
+
+DAG auth to BBAP API (choose one):
+- `BBAP_API_TOKEN` (recommended)
+- or `BBAP_LOGIN_EMAIL` + `BBAP_LOGIN_PASSWORD`
+
+New monitoring APIs:
+- `GET /api/v2/monitoring/airflow/overview`
+- `GET /api/v2/monitoring/airflow/events?limit=20`
+- `POST /api/v2/monitoring/airflow/trigger` (staff roles)
+
 ### Option C — CLI Mode
 
 ```bash

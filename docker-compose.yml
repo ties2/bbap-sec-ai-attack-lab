@@ -1,8 +1,6 @@
 # BBAP-Sec AI Security Pentest Platform
 # docker-compose.yml
 
-version: "3.8"
-
 services:
   # ── Main application ──
   webapp:
@@ -30,6 +28,12 @@ services:
       - SANDBOX_TIMEOUT=3600
       - SANDBOX_MEMORY_LIMIT=4g
       - SANDBOX_CPU_LIMIT=2.0
+      # Airflow integration (webapp -> airflow API)
+      - AIRFLOW_API_BASE=http://airflow-webserver:8080/api/v1
+      - AIRFLOW_USERNAME=${AIRFLOW_USERNAME:-airflow}
+      - AIRFLOW_PASSWORD=${AIRFLOW_PASSWORD:-airflow}
+      - AIRFLOW_MONITOR_FILE=/app/logs/airflow-monitoring/bbap_monitoring_latest.json
+      - AIRFLOW_EVENTS_FILE=/app/logs/airflow-monitoring/bbap_monitoring_events.jsonl
     networks:
       - bbap-sec-main
     depends_on:
@@ -46,6 +50,112 @@ services:
     entrypoint: ["echo", "Sandbox image built successfully"]
     restart: "no"
 
+  # ── Airflow metadata DB ──
+  airflow-db:
+    image: postgres:15
+    container_name: bbap-sec-airflow-db
+    profiles: ["airflow"]
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - airflow-db-data:/var/lib/postgresql/data
+    networks:
+      - bbap-sec-main
+    restart: unless-stopped
+
+  # ── Airflow DB init + admin user ──
+  airflow-init:
+    image: apache/airflow:2.10.2
+    container_name: bbap-sec-airflow-init
+    profiles: ["airflow"]
+    depends_on:
+      - airflow-db
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db/airflow
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
+      - AIRFLOW_UID=50000
+      - AIRFLOW_USERNAME=${AIRFLOW_USERNAME:-airflow}
+      - AIRFLOW_PASSWORD=${AIRFLOW_PASSWORD:-airflow}
+    user: "50000:0"
+    volumes:
+      - ./orchestration/airflow/dags:/opt/airflow/dags
+      - ./orchestration/airflow/logs:/opt/airflow/logs
+      - ./orchestration/airflow/plugins:/opt/airflow/plugins
+      - ./logs/airflow-monitoring:/opt/airflow/monitoring
+    command: >
+      bash -c "airflow db migrate && airflow users create --username ${AIRFLOW_USERNAME:-airflow} --password ${AIRFLOW_PASSWORD:-airflow} --firstname BBAP --lastname Sec --role Admin --email admin@bbap.local || true"
+    networks:
+      - bbap-sec-main
+    restart: "no"
+
+  # ── Airflow webserver ──
+  airflow-webserver:
+    image: apache/airflow:2.10.2
+    container_name: bbap-sec-airflow-webserver
+    profiles: ["airflow"]
+    depends_on:
+      - airflow-db
+      - airflow-init
+    ports:
+      - "8081:8080"
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db/airflow
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
+      - AIRFLOW_UID=50000
+      # DAG env (airflow -> bbap webapp)
+      - BBAP_API_BASE_URL=${BBAP_API_BASE_URL:-http://host.docker.internal:5000}
+      - BBAP_API_TOKEN=${BBAP_API_TOKEN:-}
+      - BBAP_LOGIN_EMAIL=${BBAP_LOGIN_EMAIL:-}
+      - BBAP_LOGIN_PASSWORD=${BBAP_LOGIN_PASSWORD:-}
+      - BBAP_MONITOR_OUTPUT_DIR=/opt/airflow/monitoring
+    user: "50000:0"
+    volumes:
+      - ./orchestration/airflow/dags:/opt/airflow/dags
+      - ./orchestration/airflow/logs:/opt/airflow/logs
+      - ./orchestration/airflow/plugins:/opt/airflow/plugins
+      - ./logs/airflow-monitoring:/opt/airflow/monitoring
+    command: webserver
+    networks:
+      - bbap-sec-main
+    restart: unless-stopped
+
+  # ── Airflow scheduler ──
+  airflow-scheduler:
+    image: apache/airflow:2.10.2
+    container_name: bbap-sec-airflow-scheduler
+    profiles: ["airflow"]
+    depends_on:
+      - airflow-db
+      - airflow-init
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db/airflow
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
+      - AIRFLOW_UID=50000
+      # DAG env (airflow -> bbap webapp)
+      - BBAP_API_BASE_URL=${BBAP_API_BASE_URL:-http://host.docker.internal:5000}
+      - BBAP_API_TOKEN=${BBAP_API_TOKEN:-}
+      - BBAP_LOGIN_EMAIL=${BBAP_LOGIN_EMAIL:-}
+      - BBAP_LOGIN_PASSWORD=${BBAP_LOGIN_PASSWORD:-}
+      - BBAP_MONITOR_OUTPUT_DIR=/opt/airflow/monitoring
+    user: "50000:0"
+    volumes:
+      - ./orchestration/airflow/dags:/opt/airflow/dags
+      - ./orchestration/airflow/logs:/opt/airflow/logs
+      - ./orchestration/airflow/plugins:/opt/airflow/plugins
+      - ./logs/airflow-monitoring:/opt/airflow/monitoring
+    command: scheduler
+    networks:
+      - bbap-sec-main
+    restart: unless-stopped
+
 networks:
   bbap-sec-main:
     driver: bridge
@@ -56,4 +166,6 @@ networks:
 
 volumes:
   sandbox-models:
+    driver: local
+  airflow-db-data:
     driver: local
