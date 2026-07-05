@@ -551,6 +551,7 @@ function Sidebar({
   projects,
   onSelectProject,
   onNewProject,
+  onLogout,
 }) {
   const layers = Object.entries(LAYER_META);
   const findingsCount = MOCK_FINDINGS.filter(
@@ -715,6 +716,16 @@ function Sidebar({
           <NavBtn id="settings" icon={Settings} label="Settings" />
         </Section>
       </nav>
+
+      <div className="p-2 border-t border-white/[0.06]">
+        <button
+          onClick={onLogout}
+          className="w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[11px] font-medium text-red-300/80 hover:text-red-300 hover:bg-red-500/[0.08] border border-transparent"
+        >
+          <Unplug size={14} strokeWidth={1.8} />
+          <span className="flex-1 text-left">Logout</span>
+        </button>
+      </div>
     </aside>
   );
 }
@@ -3778,6 +3789,870 @@ function PipelinePage({ project }) {
 }
 
 /* ═══════════════════════════════════
+   AUTH + TEAM PAGE
+   ═══════════════════════════════════ */
+function LoginPage({ onLogin }) {
+  const [email, setEmail] = useState("admin@bbap-sec.com");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const resp = await fetch(`${API2}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data?.token) {
+        setError(data?.error || "Login failed");
+        return;
+      }
+      localStorage.setItem("bbap_token", data.token);
+      localStorage.setItem("bbap_user", JSON.stringify(data.user || {}));
+      onLogin(data.user || null);
+    } catch (err) {
+      setError(err.message || "Login failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#080b12] flex items-center justify-center p-4">
+      <form
+        onSubmit={submit}
+        className={`${G} rounded-xl p-6 w-full max-w-md space-y-4`}
+      >
+        <div>
+          <h1 className="text-lg font-semibold text-white">BBAP-Sec Login</h1>
+          <p className="text-xs text-white/35">
+            Sign in to access Team & dashboard APIs
+          </p>
+        </div>
+        <div>
+          <label className="text-[11px] text-white/40 block mb-1">Email</label>
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.1] text-sm text-white/80"
+          />
+        </div>
+        <div>
+          <label className="text-[11px] text-white/40 block mb-1">
+            Password
+          </label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/[0.1] text-sm text-white/80"
+          />
+        </div>
+        {error && <div className="text-xs text-red-400">{error}</div>}
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full px-4 py-2 rounded-md bg-emerald-600 text-white text-sm font-medium disabled:opacity-50"
+        >
+          {loading ? "Signing in..." : "Sign in"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function TeamPage({ project }) {
+  const [tab, setTab] = useState("users");
+  const [users, setUsers] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [error, setError] = useState("");
+
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [newUser, setNewUser] = useState({
+    name: "",
+    email: "",
+    password: "",
+    role: "client_viewer",
+    group_name: "",
+  });
+
+  const [editingUser, setEditingUser] = useState(null);
+  const [assignUserId, setAssignUserId] = useState("");
+  const [assignRole, setAssignRole] = useState("viewer");
+
+  const [permMember, setPermMember] = useState(null);
+  const [permSections, setPermSections] = useState([]);
+
+  const SECTIONS = [
+    "overview",
+    "target",
+    "layers",
+    "findings",
+    "pipeline",
+    "atlas",
+    "report",
+    "governance",
+    "monitoring",
+    "team",
+    "knowledge",
+    "alerts",
+    "settings",
+  ];
+
+  const loadAll = async () => {
+    setError("");
+    try {
+      const [u, m, g, r] = await Promise.all([
+        api.get("/team/users"),
+        api.get(`/team/projects/${project.id}/members`),
+        api.get("/team/groups"),
+        api.get("/team/roles"),
+      ]);
+      setUsers(u?.users || []);
+      setMembers(m?.members || []);
+      setGroups(g?.groups || []);
+      setRoles(r?.roles || []);
+    } catch (e) {
+      setError(e.message || "Failed to load team data");
+    }
+  };
+
+  useEffect(() => {
+    loadAll();
+  }, [project.id]);
+
+  const createUser = async () => {
+    const resp = await fetch(`${API2}/team/users`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify(newUser),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data?.error || "Create user failed");
+    setShowAddUser(false);
+    setNewUser({
+      name: "",
+      email: "",
+      password: "",
+      role: "client_viewer",
+      group_name: "",
+    });
+    await loadAll();
+  };
+
+  const saveUser = async () => {
+    if (!editingUser) return;
+    const resp = await fetch(`${API2}/team/users/${editingUser.id}`, {
+      method: "PUT",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        name: editingUser.name,
+        role: editingUser.role,
+        group_name: editingUser.group_name,
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data?.error || "Update failed");
+    setEditingUser(null);
+    await loadAll();
+  };
+
+  const setActive = async (u, active) => {
+    const resp = await fetch(`${API2}/team/users/${u.id}`, {
+      method: "PUT",
+      headers: authHeaders(),
+      body: JSON.stringify({ active }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data?.error || "Update failed");
+    await loadAll();
+  };
+
+  const assignMember = async () => {
+    if (!assignUserId) return;
+    const resp = await fetch(`${API2}/team/projects/${project.id}/members`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ user_id: Number(assignUserId), role: assignRole }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data?.error || "Assign failed");
+    setAssignUserId("");
+    await loadAll();
+  };
+
+  const removeMember = async (userId) => {
+    const resp = await fetch(
+      `${API2}/team/projects/${project.id}/members/${userId}`,
+      {
+        method: "DELETE",
+        headers: bearerHeader(),
+      },
+    );
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data?.error || "Remove failed");
+    await loadAll();
+  };
+
+  const savePermissions = async () => {
+    if (!permMember) return;
+    const resp = await fetch(
+      `${API2}/team/projects/${project.id}/permissions`,
+      {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          user_id: permMember.user_id,
+          sections: permSections,
+        }),
+      },
+    );
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data?.error || "Permission update failed");
+    setPermMember(null);
+    setPermSections([]);
+    await loadAll();
+  };
+
+  const openPermissions = (m) => {
+    setPermMember(m);
+    let current = [];
+    try {
+      current = m.allowed_sections ? JSON.parse(m.allowed_sections) : [];
+    } catch {
+      current = [];
+    }
+    setPermSections(Array.isArray(current) ? current : []);
+  };
+
+  const togglePerm = (s) => {
+    setPermSections((prev) =>
+      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s],
+    );
+  };
+
+  const safe = async (fn) => {
+    setError("");
+    try {
+      await fn();
+    } catch (e) {
+      setError(e.message || "Operation failed");
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-white mb-0.5">Team</h1>
+          <p className="text-sm text-white/35">
+            User, membership, group, and role management for {project.name}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        {[
+          ["users", `Users (${users.length})`],
+          ["members", `Project Members (${members.length})`],
+          ["groups", `Groups (${groups.length})`],
+          ["roles", `Roles (${roles.length})`],
+        ].map(([k, lbl]) => (
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className={`px-3 py-1.5 rounded-md text-[11px] ${tab === k ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" : `${G} text-white/50`}`}
+          >
+            {lbl}
+          </button>
+        ))}
+      </div>
+
+      {error && <div className="text-sm text-red-400">{error}</div>}
+
+      {tab === "users" && (
+        <div className={`${G} rounded-lg p-4 space-y-3`}>
+          <div className="flex justify-between items-center">
+            <div className="text-[11px] text-white/40">All users</div>
+            <button
+              onClick={() => setShowAddUser(true)}
+              className="px-3 py-1.5 rounded-md bg-emerald-600 text-white text-[11px] flex items-center gap-1"
+            >
+              <Plus size={12} />
+              Add User
+            </button>
+          </div>
+          {users.map((u) => (
+            <div
+              key={u.id}
+              className="flex items-center gap-3 px-3 py-2 rounded-md bg-white/[0.02]"
+            >
+              <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-300 text-xs flex items-center justify-center">
+                {(u.name || "U").slice(0, 1).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px] text-white/80 truncate">
+                  {u.name} <span className="text-white/30">({u.email})</span>
+                </div>
+                <div className="text-[10px] text-white/30">
+                  {u.role} • {u.group_name || "—"}
+                </div>
+              </div>
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded ${u.active ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"}`}
+              >
+                {u.active ? "active" : "disabled"}
+              </span>
+              <button
+                onClick={() => setEditingUser({ ...u })}
+                className="text-[10px] text-white/50 hover:text-white"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => safe(() => setActive(u, !u.active))}
+                className="text-[10px] text-amber-300/80 hover:text-amber-300"
+              >
+                {u.active ? "Disable" : "Enable"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === "members" && (
+        <div className={`${G} rounded-lg p-4 space-y-3`}>
+          <div className="flex items-center gap-2">
+            <select
+              value={assignUserId}
+              onChange={(e) => setAssignUserId(e.target.value)}
+              className="px-2 py-1.5 rounded bg-black/30 border border-white/[0.1] text-[11px] text-white/80"
+            >
+              <option value="">Select user</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} ({u.email})
+                </option>
+              ))}
+            </select>
+            <select
+              value={assignRole}
+              onChange={(e) => setAssignRole(e.target.value)}
+              className="px-2 py-1.5 rounded bg-black/30 border border-white/[0.1] text-[11px] text-white/80"
+            >
+              <option value="viewer">viewer</option>
+              <option value="analyst">analyst</option>
+              <option value="engineer">engineer</option>
+              <option value="lead">lead</option>
+            </select>
+            <button
+              onClick={() => safe(assignMember)}
+              className="px-3 py-1.5 rounded-md bg-emerald-600 text-white text-[11px]"
+            >
+              Assign User
+            </button>
+          </div>
+          {members.map((m) => (
+            <div
+              key={`${m.project_id}-${m.user_id}`}
+              className="flex items-center gap-3 px-3 py-2 rounded-md bg-white/[0.02]"
+            >
+              <div className="flex-1">
+                <div className="text-[12px] text-white/80">
+                  {m.name} <span className="text-white/30">({m.email})</span>
+                </div>
+                <div className="text-[10px] text-white/30">
+                  project role: {m.role} • user role: {m.user_role}
+                </div>
+              </div>
+              <button
+                onClick={() => openPermissions(m)}
+                className="text-[10px] px-2 py-1 rounded bg-violet-500/10 text-violet-300 border border-violet-500/20"
+              >
+                Permissions
+              </button>
+              <button
+                onClick={() => safe(() => removeMember(m.user_id))}
+                className="text-[10px] text-red-300/80 hover:text-red-300"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === "groups" && (
+        <div className={`${G} rounded-lg p-4 space-y-2`}>
+          {groups.map((g) => (
+            <div
+              key={g.id}
+              className="flex items-center justify-between px-3 py-2 rounded-md bg-white/[0.02]"
+            >
+              <div>
+                <div className="text-[12px] text-white/80">{g.name}</div>
+                <div className="text-[10px] text-white/30">
+                  {g.description || "—"}
+                </div>
+              </div>
+              <div className="text-[10px] text-white/40">
+                {g.member_count} members
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === "roles" && (
+        <div className={`${G} rounded-lg p-4 space-y-2`}>
+          {roles.map((r) => (
+            <div key={r.id} className="px-3 py-2 rounded-md bg-white/[0.02]">
+              <div className="text-[12px] text-white/80">
+                {r.label} <span className="text-white/30">({r.id})</span>
+              </div>
+              <div className="text-[10px] text-white/30">
+                group: {r.group} • level: {r.level}
+              </div>
+              <div className="text-[10px] text-emerald-300/70 mt-1">
+                default: {(r.default_sections || []).join(", ")}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showAddUser && (
+        <Overlay onClose={() => setShowAddUser(false)}>
+          <div className="p-5 space-y-3">
+            <div className="text-sm text-white/80 font-medium">Add User</div>
+            <input
+              placeholder="Name"
+              value={newUser.name}
+              onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+              className="w-full px-3 py-2 rounded bg-black/30 border border-white/[0.1] text-sm text-white/80"
+            />
+            <input
+              placeholder="Email"
+              value={newUser.email}
+              onChange={(e) =>
+                setNewUser({ ...newUser, email: e.target.value })
+              }
+              className="w-full px-3 py-2 rounded bg-black/30 border border-white/[0.1] text-sm text-white/80"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={newUser.password}
+              onChange={(e) =>
+                setNewUser({ ...newUser, password: e.target.value })
+              }
+              className="w-full px-3 py-2 rounded bg-black/30 border border-white/[0.1] text-sm text-white/80"
+            />
+            <input
+              placeholder="Group name"
+              value={newUser.group_name}
+              onChange={(e) =>
+                setNewUser({ ...newUser, group_name: e.target.value })
+              }
+              className="w-full px-3 py-2 rounded bg-black/30 border border-white/[0.1] text-sm text-white/80"
+            />
+            <select
+              value={newUser.role}
+              onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+              className="w-full px-3 py-2 rounded bg-black/30 border border-white/[0.1] text-sm text-white/80"
+            >
+              {(roles.length
+                ? roles
+                : [
+                    { id: "bbap_admin" },
+                    { id: "bbap_lead" },
+                    { id: "bbap_engineer" },
+                    { id: "bbap_analyst" },
+                    { id: "client_admin" },
+                    { id: "client_viewer" },
+                  ]
+              ).map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.id}
+                </option>
+              ))}
+            </select>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowAddUser(false)}
+                className="px-3 py-1.5 text-[11px] text-white/60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => safe(createUser)}
+                className="px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px]"
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </Overlay>
+      )}
+
+      {editingUser && (
+        <Overlay onClose={() => setEditingUser(null)}>
+          <div className="p-5 space-y-3">
+            <div className="text-sm text-white/80 font-medium">Edit User</div>
+            <input
+              value={editingUser.name || ""}
+              onChange={(e) =>
+                setEditingUser({ ...editingUser, name: e.target.value })
+              }
+              className="w-full px-3 py-2 rounded bg-black/30 border border-white/[0.1] text-sm text-white/80"
+            />
+            <input
+              value={editingUser.group_name || ""}
+              onChange={(e) =>
+                setEditingUser({ ...editingUser, group_name: e.target.value })
+              }
+              className="w-full px-3 py-2 rounded bg-black/30 border border-white/[0.1] text-sm text-white/80"
+            />
+            <select
+              value={editingUser.role || "client_viewer"}
+              onChange={(e) =>
+                setEditingUser({ ...editingUser, role: e.target.value })
+              }
+              className="w-full px-3 py-2 rounded bg-black/30 border border-white/[0.1] text-sm text-white/80"
+            >
+              {(roles.length
+                ? roles
+                : [
+                    { id: "bbap_admin" },
+                    { id: "bbap_lead" },
+                    { id: "bbap_engineer" },
+                    { id: "bbap_analyst" },
+                    { id: "client_admin" },
+                    { id: "client_viewer" },
+                  ]
+              ).map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.id}
+                </option>
+              ))}
+            </select>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setEditingUser(null)}
+                className="px-3 py-1.5 text-[11px] text-white/60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => safe(saveUser)}
+                className="px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px]"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </Overlay>
+      )}
+
+      {permMember && (
+        <Overlay onClose={() => setPermMember(null)}>
+          <div className="p-5 space-y-3">
+            <div className="text-sm text-white/80 font-medium">
+              Project Permissions — {permMember.name}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {SECTIONS.map((s) => (
+                <label
+                  key={s}
+                  className="flex items-center gap-2 text-[11px] text-white/70 bg-white/[0.02] px-2 py-1.5 rounded"
+                >
+                  <input
+                    type="checkbox"
+                    checked={permSections.includes(s)}
+                    onChange={() => togglePerm(s)}
+                  />
+                  {s}
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setPermMember(null)}
+                className="px-3 py-1.5 text-[11px] text-white/60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => safe(savePermissions)}
+                className="px-3 py-1.5 rounded bg-emerald-600 text-white text-[11px]"
+              >
+                Save Permissions
+              </button>
+            </div>
+          </div>
+        </Overlay>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════
+   KNOWLEDGE BASE (External Knowledge Hub)
+   ═══════════════════════════════════ */
+function KnowledgePage() {
+  const [files, setFiles] = useState([]);
+  const [selected, setSelected] = useState("");
+  const [content, setContent] = useState("");
+  const [loadingFiles, setLoadingFiles] = useState(true);
+  const [loadingContent, setLoadingContent] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [reindexing, setReindexing] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [error, setError] = useState("");
+  const [rootPath, setRootPath] = useState("");
+  const [health, setHealth] = useState(null);
+  const [question, setQuestion] = useState("");
+  const [messages, setMessages] = useState([]);
+
+  const loadFiles = async () => {
+    setLoadingFiles(true);
+    try {
+      const d = await api.get("/knowledge/files");
+      if (d?.error) throw new Error(d.error);
+      setFiles(d.files || []);
+      setRootPath(d.root || "");
+      const first = (d.files || [])[0] || "";
+      if (first) setSelected((prev) => prev || first);
+    } catch (e) {
+      setError(e.message || "Failed to load knowledge files");
+    } finally {
+      setLoadingFiles(false);
+    }
+  };
+
+  const loadHealth = async () => {
+    try {
+      const d = await api.get("/knowledge/health");
+      if (!d?.error) setHealth(d);
+    } catch {
+      // non-blocking
+    }
+  };
+
+  const loadFile = async (path) => {
+    if (!path) return;
+    setLoadingContent(true);
+    try {
+      const d = await api.get(
+        `/knowledge/file?path=${encodeURIComponent(path)}`,
+      );
+      if (d?.error) throw new Error(d.error);
+      setContent(d.content || "");
+    } catch (e) {
+      setError(e.message || "Failed to load file");
+      setContent("");
+    } finally {
+      setLoadingContent(false);
+    }
+  };
+
+  const syncHub = async () => {
+    setSyncing(true);
+    setError("");
+    try {
+      const d = await api.post("/knowledge/sync", {});
+      if (d?.error) throw new Error(d.error);
+      await loadFiles();
+      await loadHealth();
+      if (selected) await loadFile(selected);
+    } catch (e) {
+      setError(e.message || "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const reindex = async () => {
+    setReindexing(true);
+    setError("");
+    try {
+      const d = await api.post("/knowledge/reindex", {});
+      if (d?.error) throw new Error(d.error);
+      await loadHealth();
+    } catch (e) {
+      setError(e.message || "Reindex failed");
+    } finally {
+      setReindexing(false);
+    }
+  };
+
+  const askAssistant = async () => {
+    const q = question.trim();
+    if (!q || asking) return;
+
+    setQuestion("");
+    setAsking(true);
+    setError("");
+    const userMsg = { role: "user", text: q };
+    setMessages((prev) => [...prev, userMsg]);
+
+    try {
+      const d = await api.post("/knowledge/ask", { question: q, top_k: 5 });
+      if (d?.error) throw new Error(d.error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: d.answer || "No answer",
+          security: d.security || null,
+        },
+      ]);
+      if (d?.stats) setHealth(d.stats);
+    } catch (e) {
+      setError(e.message || "Ask failed");
+    } finally {
+      setAsking(false);
+    }
+  };
+
+  useEffect(() => {
+    loadFiles();
+    loadHealth();
+  }, []);
+
+  useEffect(() => {
+    if (selected) loadFile(selected);
+  }, [selected]);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-white mb-0.5">
+            Knowledge Base Assistant
+          </h1>
+          <p className="text-sm text-white/35">
+            AI assistant grounded on BBAP-Sec-Knowledge-Hub
+          </p>
+          {rootPath && (
+            <p className="text-[10px] text-white/20 mt-1">
+              Synced source connected
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={reindex}
+            disabled={reindexing}
+            className="px-3 py-2 rounded-md bg-violet-600/80 text-white text-[11px] font-medium hover:bg-violet-500 disabled:opacity-40"
+          >
+            {reindexing ? "Reindexing..." : "Reindex RAG"}
+          </button>
+          <button
+            onClick={syncHub}
+            disabled={syncing}
+            className="px-4 py-2 rounded-md bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-500 disabled:opacity-40"
+          >
+            {syncing ? "Syncing..." : "Sync Knowledge Hub"}
+          </button>
+        </div>
+      </div>
+
+      {health && (
+        <div
+          className={`${G} rounded-lg px-3 py-2 flex items-center gap-3 text-[10px] text-white/50`}
+        >
+          <span>Indexed: {health.indexed ? "yes" : "no"}</span>
+          <span>Files: {health.files || 0}</span>
+          <span>Chunks: {health.chunks || 0}</span>
+          {health.error ? (
+            <span className="text-red-300">Error: {health.error}</span>
+          ) : null}
+        </div>
+      )}
+
+      {error && (
+        <div className="px-3 py-2 rounded-md bg-red-500/10 border border-red-500/20 text-[11px] text-red-300">
+          {error}
+        </div>
+      )}
+
+      <div className="grid gap-4 grid-cols-1">
+        <div className="col-span-12">
+          <div className={`${G} rounded-lg p-4 h-[68vh] flex flex-col`}>
+            <div className="text-[10px] text-white/25 uppercase tracking-widest mb-3">
+              Assistant Chat
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {messages.length === 0 && (
+                <div className="text-[11px] text-white/35">
+                  Ask security questions. Answers are grounded in
+                  BBAP-Sec-Knowledge-Hub via RAG.
+                </div>
+              )}
+              {messages.map((m, i) => (
+                <div
+                  key={i}
+                  className={`rounded-md p-3 ${m.role === "user" ? "bg-white/[0.03] border border-white/[0.06]" : "bg-emerald-500/[0.06] border border-emerald-500/20"}`}
+                >
+                  <div
+                    className={`text-[10px] uppercase tracking-widest mb-1 ${m.role === "user" ? "text-white/30" : "text-emerald-300/80"}`}
+                  >
+                    {m.role}
+                  </div>
+                  <div className="text-[12px] text-white/80 whitespace-pre-wrap">
+                    {m.text}
+                  </div>
+                  {m.security?.query_injection_flag && (
+                    <div className="text-[10px] text-amber-300 mt-2 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1">
+                      Suspicious prompt-injection pattern detected in query.
+                      Response was safety-constrained.
+                    </div>
+                  )}
+                </div>
+              ))}
+              {asking && (
+                <div className="text-[11px] text-white/35">Thinking...</div>
+              )}
+            </div>
+
+            <div className="mt-3 flex items-center gap-2">
+              <input
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    askAssistant();
+                  }
+                }}
+                className="flex-1 px-3 py-2 rounded-md bg-black/30 border border-white/[0.08] text-white/70 text-[12px] focus:outline-none focus:border-emerald-500/30"
+                placeholder="Ask about model security, ATLAS techniques, mitigations..."
+              />
+              <button
+                onClick={askAssistant}
+                disabled={asking || !question.trim()}
+                className="px-4 py-2 rounded-md bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-500 disabled:opacity-40"
+              >
+                {asking ? "Asking..." : "Ask"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════
    PLACEHOLDER PAGES
    ═══════════════════════════════════ */
 function PlaceholderPage({ title, desc }) {
@@ -3800,7 +4675,7 @@ function PlaceholderPage({ title, desc }) {
 /* ═══════════════════════════════════
    MAIN APP
    ═══════════════════════════════════ */
-export default function App() {
+function Dashboard({ onLogout }) {
   const [page, setPage] = useState("overview");
   const [projects, setProjects] = useState(MOCK_PROJECTS);
   const [projectId, setProjectId] = useState(MOCK_PROJECTS[0].id);
@@ -3838,13 +4713,7 @@ export default function App() {
     if (page === "atlas") return <AtlasPage />;
     // if (page === "team") return <PlaceholderPage title="Team" desc="User management and project assignments" />;
     if (page === "team") return <TeamPage project={project} />;
-    if (page === "knowledge")
-      return (
-        <PlaceholderPage
-          title="Knowledge Base"
-          desc="Notes, policies, and templates"
-        />
-      );
+    if (page === "knowledge") return <KnowledgePage />;
     if (page === "alerts")
       return (
         <PlaceholderPage title="Alerts" desc="Severity-based notifications" />
@@ -3878,10 +4747,59 @@ export default function App() {
         projects={projects}
         onSelectProject={setProjectId}
         onNewProject={handleNewProject}
+        onLogout={onLogout}
       />
       <main className="flex-1 overflow-y-auto relative z-10 p-6 pb-20">
         {getContent()}
       </main>
     </div>
   );
+}
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem("bbap_token");
+    if (!token) {
+      setChecking(false);
+      return;
+    }
+    fetch(`${API2}/auth/me`, { headers: bearerHeader() })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((me) => {
+        if (me?.id) {
+          setUser(me);
+        } else {
+          localStorage.removeItem("bbap_token");
+          localStorage.removeItem("bbap_user");
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem("bbap_token");
+        localStorage.removeItem("bbap_user");
+      })
+      .finally(() => setChecking(false));
+  }, []);
+
+  if (checking) {
+    return (
+      <div className="min-h-screen bg-[#080b12] flex items-center justify-center text-white/50 text-sm">
+        Checking session...
+      </div>
+    );
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem("bbap_token");
+    localStorage.removeItem("bbap_user");
+    setUser(null);
+  };
+
+  if (!user) {
+    return <LoginPage onLogin={setUser} />;
+  }
+
+  return <Dashboard onLogout={handleLogout} />;
 }

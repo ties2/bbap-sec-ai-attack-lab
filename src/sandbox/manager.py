@@ -11,20 +11,22 @@ Usage:
     manager.destroy(sandbox_id)
 """
 
-import os
-import time
 import json
 import logging
+import os
 import shutil
-import requests
-from pathlib import Path
+import time
 from datetime import datetime
+from pathlib import Path
+
+import requests
 
 logger = logging.getLogger("sandbox.manager")
 
 # Try Docker SDK — gracefully degrade if not installed
 try:
     import docker
+
     DOCKER_AVAILABLE = True
 except ImportError:
     DOCKER_AVAILABLE = False
@@ -37,16 +39,28 @@ SANDBOX_NETWORK = os.environ.get("SANDBOX_NETWORK", "bbap-sec-sandbox-net")
 MODEL_UPLOAD_DIR = os.environ.get("MODEL_UPLOAD_DIR", "/tmp/bbap-sec-models")
 SANDBOX_PORT_RANGE_START = int(os.environ.get("SANDBOX_PORT_START", "5100"))
 SANDBOX_PORT_RANGE_END = int(os.environ.get("SANDBOX_PORT_END", "5200"))
-SANDBOX_TIMEOUT = int(os.environ.get("SANDBOX_TIMEOUT", "3600"))      # 1 hour default
+SANDBOX_TIMEOUT = int(os.environ.get("SANDBOX_TIMEOUT", "3600"))  # 1 hour default
 SANDBOX_MEMORY_LIMIT = os.environ.get("SANDBOX_MEMORY_LIMIT", "4g")
 SANDBOX_CPU_LIMIT = float(os.environ.get("SANDBOX_CPU_LIMIT", "2.0"))  # CPU cores
+SANDBOX_USE_INTERNAL_NETWORK = (
+    os.environ.get("SANDBOX_USE_INTERNAL_NETWORK", "true").lower() == "true"
+)
 
 
 class SandboxInfo:
     """Holds sandbox state and metadata."""
 
-    def __init__(self, sandbox_id, project_id, container_id, port,
-                 framework, model_filename, model_size, gpu_enabled=False):
+    def __init__(
+        self,
+        sandbox_id,
+        project_id,
+        container_id,
+        port,
+        framework,
+        model_filename,
+        model_size,
+        gpu_enabled=False,
+    ):
         self.id = sandbox_id
         self.project_id = project_id
         self.container_id = container_id
@@ -73,7 +87,9 @@ class SandboxInfo:
             "status": self.status,
             "created_at": self.created_at,
             "destroyed_at": self.destroyed_at,
-            "api_url": f"http://localhost:{self.port}" if self.status == "running" else None,
+            "api_url": f"http://localhost:{self.port}"
+            if self.status == "running"
+            else None,
             "error": self.error,
         }
 
@@ -83,7 +99,7 @@ class SandboxManager:
 
     def __init__(self, db=None):
         self.db = db
-        self._sandboxes = {}   # in-memory cache: sandbox_id → SandboxInfo
+        self._sandboxes = {}  # in-memory cache: sandbox_id → SandboxInfo
         self._next_id = 1
         self._client = None
 
@@ -111,7 +127,9 @@ class SandboxManager:
                 driver="bridge",
                 internal=True,  # No external internet access
             )
-            logger.info(f"Created sandbox network: {SANDBOX_NETWORK} (internal, no egress)")
+            logger.info(
+                f"Created sandbox network: {SANDBOX_NETWORK} (internal, no egress)"
+            )
 
     def _ensure_image(self):
         """Check if sandbox image exists, warn if not."""
@@ -145,7 +163,9 @@ class SandboxManager:
             SandboxInfo dict
         """
         if not self._client:
-            raise RuntimeError("Docker is not available. Install Docker and the Docker SDK.")
+            raise RuntimeError(
+                "Docker is not available. Install Docker and the Docker SDK."
+            )
 
         # Validate model file
         if not os.path.exists(model_path):
@@ -157,6 +177,7 @@ class SandboxManager:
         # Auto-detect framework if not provided
         if framework is None:
             from sandbox.model_loader import detect_framework
+
             framework = detect_framework(model_filename)
 
         # Copy model to a dedicated directory for this sandbox
@@ -186,11 +207,11 @@ class SandboxManager:
                 "image": SANDBOX_IMAGE,
                 "name": f"bbap-sbx-{sandbox_id:03d}",
                 "detach": True,
-                "ports": {"5000/tcp": ('127.0.0.1', port)},
+                "ports": {"5000/tcp": ("127.0.0.1", port)},
                 "volumes": {
                     os.path.abspath(model_dir): {
                         "bind": "/model",
-                        "mode": "ro",   # Read-only model access
+                        "mode": "ro",  # Read-only model access
                     }
                 },
                 "environment": {
@@ -201,13 +222,21 @@ class SandboxManager:
                 },
                 "mem_limit": SANDBOX_MEMORY_LIMIT,
                 "nano_cpus": int(SANDBOX_CPU_LIMIT * 1e9),
-                # "network": SANDBOX_NETWORK,
+                "cap_drop": ["ALL"],
+                "security_opt": ["no-new-privileges:true"],
+                "pids_limit": 256,
                 "labels": {
                     "bbap-sec": "sandbox",
                     "project_id": str(project_id),
                     "sandbox_id": str(sandbox_id),
                 },
             }
+
+            # Attach container to internal no-egress network by default.
+            # Set SANDBOX_USE_INTERNAL_NETWORK=false only if your Docker setup
+            # requires published-port access during local development.
+            if SANDBOX_USE_INTERNAL_NETWORK:
+                container_config["network"] = SANDBOX_NETWORK
 
             # GPU support via NVIDIA runtime
             if gpu:
@@ -230,7 +259,9 @@ class SandboxManager:
                 container.reload()
                 if container.status == "running":
                     try:
-                        resp = requests.get(f"http://localhost:{port}/health", timeout=3)
+                        resp = requests.get(
+                            f"http://localhost:{port}/health", timeout=3
+                        )
                         if resp.status_code == 200:
                             sandbox_info.status = "running"
                             logger.info(f"Sandbox {sandbox_id} is healthy")
@@ -277,7 +308,9 @@ class SandboxManager:
                 else:
                     # Also check API health
                     try:
-                        resp = requests.get(f"http://localhost:{info.port}/stats", timeout=3)
+                        resp = requests.get(
+                            f"http://localhost:{info.port}/stats", timeout=3
+                        )
                         stats = resp.json()
                         result = info.to_dict()
                         result["api_stats"] = stats

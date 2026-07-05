@@ -147,6 +147,36 @@ npm run build
 python webapp/app.py
 ```
 
+### Knowledge Hub Sync (for Knowledge Base section)
+
+This project can sync docs from:
+`https://github.com/ties2/BBAP-Sec-Knowledge-Hub`
+
+```bash
+# clone or update external knowledge repo
+./scripts/sync_knowledge_hub.sh
+```
+
+Optional env overrides:
+- `BBAP_KNOWLEDGE_HUB_REPO`
+- `BBAP_KNOWLEDGE_HUB_BRANCH`
+- `BBAP_KNOWLEDGE_HUB_PATH` (default: `external/BBAP-Sec-Knowledge-Hub`)
+
+The dashboard Knowledge Base section now includes a RAG assistant over the synced hub.
+
+APIs:
+- `GET /api/v2/knowledge/files`
+- `GET /api/v2/knowledge/file?path=...`
+- `POST /api/v2/knowledge/sync` (staff roles) — sync + auto reindex RAG
+- `POST /api/v2/knowledge/reindex` (staff roles)
+- `GET /api/v2/knowledge/health`
+- `POST /api/v2/knowledge/ask` with `{ "question": "...", "top_k": 5 }`
+
+Optional LLM backend for generated answers (otherwise retrieval-only fallback):
+- `BBAP_KB_LLM_BACKEND=ollama`
+- `BBAP_KB_OLLAMA_HOST=http://localhost:11434`
+- `BBAP_KB_OLLAMA_MODEL=llama3.1`
+
 ### Option C — CLI Mode
 
 ```bash

@@ -20,7 +20,10 @@ tokenizers>=0.15.0
 flask>=3.0.0
 flask-cors>=4.0.0
 
-flask-limiter
+flask-limiter>=3.8.0
+PyJWT>=2.8.0
+bcrypt>=4.1.0
+gunicorn>=22.0.0
 
 # Data & Visualization
 pandas>=2.1.0
@@ -44,8 +47,4 @@ pytest-cov>=4.1.0
 jupyter>=1.0.0
 ipywidgets>=8.1.0
 
-torch
-tensorflow
-tensorflow-metal
 docker>=7.0
-

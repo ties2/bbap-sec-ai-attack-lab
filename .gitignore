@@ -83,6 +83,12 @@ config/secrets.yaml
 Thumbs.db
 desktop.ini
 
+# ---------- Databases ----------
+*.db
+*.sqlite
+*.sqlite3
+data/
+
 # ---------- Misc ----------
 *.bak
 *.tmp

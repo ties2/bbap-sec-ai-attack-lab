@@ -7,14 +7,15 @@ Mount on the main Flask app with:
     app.register_blueprint(sandbox_bp)
 """
 
-import os
 import logging
-from flask import Blueprint, request, jsonify, g
+import os
+
+from flask import Blueprint, g, jsonify, request
 from werkzeug.utils import secure_filename
+
 from src.sandbox.manager import SandboxManager
 from webapp.auth import login_required, role_required
 from webapp.security import audit_log
-
 
 logger = logging.getLogger("webapp.sandbox")
 
@@ -23,7 +24,17 @@ sandbox_bp = Blueprint("sandbox", __name__, url_prefix="/api/v2/sandbox")
 # Upload config
 UPLOAD_DIR = os.environ.get("MODEL_UPLOAD_DIR", "/tmp/bbap-sec-models")
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB
-ALLOWED_EXTENSIONS = {".pt", ".pth", ".onnx", ".h5", ".keras", ".pb", ".pkl", ".joblib", ".safetensors"}
+ALLOWED_EXTENSIONS = {
+    ".pt",
+    ".pth",
+    ".onnx",
+    ".h5",
+    ".keras",
+    ".pb",
+    ".pkl",
+    ".joblib",
+    ".safetensors",
+}
 
 # Singleton manager (initialized when blueprint is registered)
 _manager = None
@@ -40,7 +51,10 @@ def _validate_model_file(filename):
     """Check if the file extension is supported."""
     ext = os.path.splitext(filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
-        return False, f"Unsupported file type: {ext}. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+        return (
+            False,
+            f"Unsupported file type: {ext}. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+        )
     return True, None
 
 
@@ -48,7 +62,9 @@ def _validate_model_file(filename):
 
 
 @sandbox_bp.route("/create", methods=["POST"])
-@role_required("bbap_admin", "bbap_lead", "bbap_engineer")   # only staff create sandboxes
+@role_required(
+    "bbap_admin", "bbap_lead", "bbap_engineer"
+)  # only staff create sandboxes
 def create_sandbox():
     """Create a new sandbox from an uploaded model file.
 
@@ -72,7 +88,11 @@ def create_sandbox():
 
     # Check for file upload
     if "file" not in request.files:
-        return jsonify({"error": "No model file uploaded. Send as multipart/form-data with field name 'file'"}), 400
+        return jsonify(
+            {
+                "error": "No model file uploaded. Send as multipart/form-data with field name 'file'"
+            }
+        ), 400
 
     file = request.files["file"]
     if file.filename == "":
@@ -94,7 +114,9 @@ def create_sandbox():
     file_size = os.path.getsize(filepath)
     if file_size > MAX_FILE_SIZE:
         os.remove(filepath)
-        return jsonify({"error": f"File too large ({file_size} bytes). Max: {MAX_FILE_SIZE}"}), 400
+        return jsonify(
+            {"error": f"File too large ({file_size} bytes). Max: {MAX_FILE_SIZE}"}
+        ), 400
 
     if file_size == 0:
         os.remove(filepath)
@@ -104,7 +126,9 @@ def create_sandbox():
     framework = request.form.get("framework", None)
     gpu = request.form.get("gpu", "false").lower() == "true"
 
-    logger.info(f"Creating sandbox: project={project_id}, file={filename}, framework={framework}, gpu={gpu}")
+    logger.info(
+        f"Creating sandbox: project={project_id}, file={filename}, framework={framework}, gpu={gpu}"
+    )
 
     # try:
     #     result = manager.create(
@@ -131,23 +155,28 @@ def create_sandbox():
         os.remove(filepath)
 
         # AUDIT LOG — add here, after success, before return
-        audit_log("SANDBOX_CREATE",
-                  user=g.current_user.get("email"),
-                  ip=request.remote_addr,
-                  detail=f"sandbox={result.get('id')} project={project_id} model={filename}")
+        audit_log(
+            "SANDBOX_CREATE",
+            user=g.current_user.get("email"),
+            ip=request.remote_addr,
+            detail=f"sandbox={result.get('id')} project={project_id} model={filename}",
+        )
 
         return jsonify(result), 201
     except Exception as e:
         logger.error(f"Sandbox creation failed: {e}")
         os.remove(filepath)
-        audit_log("SANDBOX_CREATE_FAILED",
-                  user=g.current_user.get("email"),
-                  ip=request.remote_addr,
-                  detail=f"project={project_id} error={str(e)}")
+        audit_log(
+            "SANDBOX_CREATE_FAILED",
+            user=g.current_user.get("email"),
+            ip=request.remote_addr,
+            detail=f"project={project_id} error={str(e)}",
+        )
         return jsonify({"error": str(e)}), 500
 
 
 @sandbox_bp.route("/<int:sandbox_id>", methods=["GET"])
+@login_required
 def sandbox_status(sandbox_id):
     """Get sandbox status and stats."""
     manager = get_manager()
@@ -158,7 +187,7 @@ def sandbox_status(sandbox_id):
 
 
 @sandbox_bp.route("/<int:sandbox_id>", methods=["DELETE"])
-@role_required("bbap_admin", "bbap_lead", "bbap_engineer")   # ADD
+@role_required("bbap_admin", "bbap_lead", "bbap_engineer")  # ADD
 def destroy_sandbox(sandbox_id):
     """Stop and remove a sandbox."""
     manager = get_manager()
@@ -169,6 +198,7 @@ def destroy_sandbox(sandbox_id):
 
 
 @sandbox_bp.route("/list", methods=["GET"])
+@login_required
 def list_sandboxes():
     """List all sandboxes, optionally filtered by project_id."""
     manager = get_manager()
@@ -178,7 +208,7 @@ def list_sandboxes():
 
 
 @sandbox_bp.route("/<int:sandbox_id>/predict", methods=["POST"])
-@login_required                          # ADD — any authed user can query
+@login_required  # ADD — any authed user can query
 def sandbox_predict(sandbox_id):
     """Forward a prediction request to the sandbox.
 
@@ -195,19 +225,23 @@ def sandbox_predict(sandbox_id):
 
 
 @sandbox_bp.route("/<int:sandbox_id>/predict_proba", methods=["POST"])
+@login_required
 def sandbox_predict_proba(sandbox_id):
     """Forward a probability prediction request to the sandbox."""
     manager = get_manager()
     data = request.get_json()
     if not data:
         return jsonify({"error": "Request body required"}), 400
-    result = manager.proxy_request(sandbox_id, "/predict_proba", method="POST", data=data)
+    result = manager.proxy_request(
+        sandbox_id, "/predict_proba", method="POST", data=data
+    )
     if "error" in result:
         return jsonify(result), 502
     return jsonify(result)
 
 
 @sandbox_bp.route("/<int:sandbox_id>/gradient", methods=["POST"])
+@login_required
 def sandbox_gradient(sandbox_id):
     """Forward a gradient computation request to the sandbox (white-box).
 
@@ -224,6 +258,7 @@ def sandbox_gradient(sandbox_id):
 
 
 @sandbox_bp.route("/<int:sandbox_id>/model_info", methods=["GET"])
+@login_required
 def sandbox_model_info(sandbox_id):
     """Get model metadata from the sandbox."""
     manager = get_manager()
@@ -234,6 +269,7 @@ def sandbox_model_info(sandbox_id):
 
 
 @sandbox_bp.route("/cleanup", methods=["POST"])
+@role_required("bbap_admin", "bbap_lead", "bbap_engineer")
 def cleanup_expired():
     """Destroy all expired sandboxes."""
     manager = get_manager()

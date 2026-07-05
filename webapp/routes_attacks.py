@@ -11,11 +11,12 @@ Mount on the main Flask app with:
 
 import logging
 import threading
-from flask import Blueprint, request, jsonify, g
-from src.attacks.runner import AttackRunner, ATTACK_REGISTRY
+
+from flask import Blueprint, g, jsonify, request
+
+from src.attacks.runner import ATTACK_REGISTRY, AttackRunner
 from webapp.auth import login_required, role_required
 from webapp.security import audit_log
-
 
 logger = logging.getLogger("webapp.attacks")
 
@@ -40,14 +41,17 @@ def get_runner():
 
 
 @attacks_bp.route("/list", methods=["GET"])
+@login_required
 def list_attacks():
     """List all registered attacks."""
     attacks = []
     for attack_id, info in ATTACK_REGISTRY.items():
-        attacks.append({
-            "id": attack_id,
-            "layer": info["layer"],
-        })
+        attacks.append(
+            {
+                "id": attack_id,
+                "layer": info["layer"],
+            }
+        )
     return jsonify({"attacks": attacks, "total": len(attacks)})
 
 
@@ -85,13 +89,17 @@ def run_attack():
     params = data.get("params", {})
 
     if not all([project_id, attack_id, layer, target_config]):
-        return jsonify({"error": "Missing required fields: project_id, attack_id, layer, target"}), 400
+        return jsonify(
+            {"error": "Missing required fields: project_id, attack_id, layer, target"}
+        ), 400
 
     if attack_id not in ATTACK_REGISTRY:
-        return jsonify({
-            "error": f"Unknown attack: {attack_id}",
-            "available": list(ATTACK_REGISTRY.keys())
-        }), 400
+        return jsonify(
+            {
+                "error": f"Unknown attack: {attack_id}",
+                "available": list(ATTACK_REGISTRY.keys()),
+            }
+        ), 400
 
     logger.info(f"Attack request: {attack_id} for project {project_id}")
 
@@ -106,9 +114,13 @@ def run_attack():
 
         # Store result
         run_id = finding.get("run_id", "unknown")
-        #update
-        audit_log("ATTACK_RUN", user=g.current_user.get("email"),
-                  ip=request.remote_addr, detail=f"attack={attack_id} project={project_id}")
+        # update
+        audit_log(
+            "ATTACK_RUN",
+            user=g.current_user.get("email"),
+            ip=request.remote_addr,
+            detail=f"attack={attack_id} project={project_id}",
+        )
         _results_store[run_id] = finding
 
         return jsonify(finding), 200 if finding.get("status") != "error" else 500
@@ -146,6 +158,7 @@ def run_attack_async():
 
     # Create a run_id and start in background
     import uuid
+
     run_id = str(uuid.uuid4())[:8]
 
     def _run_in_thread():
@@ -156,16 +169,19 @@ def run_attack_async():
     thread = threading.Thread(target=_run_in_thread, daemon=True)
     thread.start()
 
-    return jsonify({
-        "run_id": run_id,
-        "attack_id": attack_id,
-        "status": "started",
-        "message": f"Attack {attack_id} started in background",
-        "poll_url": f"/api/v2/attacks/progress/{run_id}",
-    }), 202
+    return jsonify(
+        {
+            "run_id": run_id,
+            "attack_id": attack_id,
+            "status": "started",
+            "message": f"Attack {attack_id} started in background",
+            "poll_url": f"/api/v2/attacks/progress/{run_id}",
+        }
+    ), 202
 
 
 @attacks_bp.route("/progress/<run_id>", methods=["GET"])
+@login_required
 def attack_progress(run_id):
     """Get progress of a running attack."""
     runner = get_runner()
@@ -179,6 +195,7 @@ def attack_progress(run_id):
 
 
 @attacks_bp.route("/result/<run_id>", methods=["GET"])
+@login_required
 def attack_result(run_id):
     """Get the result of a completed attack."""
     if run_id in _results_store:
@@ -187,6 +204,7 @@ def attack_result(run_id):
 
 
 @attacks_bp.route("/results", methods=["GET"])
+@login_required
 def list_results():
     """List all attack results, optionally filtered by project_id."""
     project_id = request.args.get("project_id", type=int)
@@ -197,6 +215,7 @@ def list_results():
 
 
 @attacks_bp.route("/active", methods=["GET"])
+@login_required
 def list_active():
     """List currently running attacks."""
     runner = get_runner()

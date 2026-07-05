@@ -15,8 +15,11 @@ services:
       - ./results:/app/results
       - ./logs:/app/logs
       - ./datasets:/app/datasets
-      - /var/run/docker.sock:/var/run/docker.sock  # Docker-in-Docker for sandbox management
-      - sandbox-models:/tmp/bbap-sec-models         # Shared model storage
+      - sandbox-models:/tmp/bbap-sec-models # Shared model storage
+      # SECURITY: docker.sock is intentionally NOT mounted by default.
+      # If you need local sandbox orchestration from webapp, uncomment below,
+      # but never expose that deployment to untrusted networks.
+      # - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - FLASK_ENV=development
       - MODEL_UPLOAD_DIR=/tmp/bbap-sec-models
